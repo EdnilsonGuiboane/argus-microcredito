@@ -9,17 +9,44 @@ import {
   Shield,
   DollarSign,
   Activity,
-  CheckCircle2,
   Printer,
+  FileSpreadsheet,
+  FileText,
+  ChevronDown,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
   BarChart,
   Bar,
@@ -39,8 +66,14 @@ import {
   ComposedChart,
 } from 'recharts';
 import { calcService } from '@/services/calcService';
-import { exportService } from '@/services/exportService';
-import { generateReportPDF, ReportData } from '@/services/institutionalPdfService';
+import {
+  exportService,
+  type ExportColumn,
+} from '@/services/exportService';
+import {
+  generateReportPDF,
+  type ReportData,
+} from '@/services/institutionalPdfService';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/components/ui/use-toast';
 import {
@@ -78,6 +111,12 @@ const PIE_COLORS = [
   CHART_COLORS.accent,
   CHART_COLORS.purple,
 ];
+
+const roleLabels = {
+  admin: 'Administrador',
+  analyst: 'Analista de Crédito',
+  cashier: 'Caixa/Tesouraria',
+} as const;
 
 function ReportHeader({
   title,
@@ -158,6 +197,8 @@ const CustomTooltipStyle = {
   padding: '10px 14px',
   fontSize: '13px',
 };
+
+type ExportRow = Record<string, unknown>;
 
 export default function Relatorios() {
   const { toast } = useToast();
@@ -347,7 +388,13 @@ export default function Relatorios() {
   }, [filteredDisbursements, filteredPayments, filteredApplications, portfolioStats, activeLoans, clients]);
 
   const monthlyTrendData = useMemo(() => {
-    const months: { name: string; desembolsado: number; recebido: number; capital: number; juros: number }[] = [];
+    const months: {
+      name: string;
+      desembolsado: number;
+      recebido: number;
+      capital: number;
+      juros: number;
+    }[] = [];
     const now = new Date();
 
     for (let i = 5; i >= 0; i--) {
@@ -470,11 +517,30 @@ export default function Relatorios() {
           appsAnalysed: approved + rejected,
           approved,
           rejected,
-          approvalRate: approved + rejected > 0 ? (approved / (approved + rejected)) * 100 : 0,
+          approvalRate:
+            approved + rejected > 0 ? (approved / (approved + rejected)) * 100 : 0,
         };
       })
       .filter((a) => a.totalLoans > 0 || a.appsAnalysed > 0);
   }, [loans, analysts, applications]);
+
+  const provinceData = useMemo(() => {
+    const provinces: Record<string, { count: number; amount: number }> = {};
+
+    activeLoans.forEach((l) => {
+      const client = clients.find((c) => c.id === l.clientId);
+      const prov = client?.province || 'Desconhecido';
+
+      if (!provinces[prov]) provinces[prov] = { count: 0, amount: 0 };
+      provinces[prov].count++;
+      provinces[prov].amount += l.outstandingPrincipal;
+    });
+
+    return Object.entries(provinces)
+      .map(([name, data]) => ({ name, ...data }))
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, 8);
+  }, [activeLoans, clients]);
 
   const parTrendData = useMemo(() => {
     const now = new Date();
@@ -504,131 +570,6 @@ export default function Relatorios() {
     });
   }, [loans]);
 
-  const provinceData = useMemo(() => {
-    const provinces: Record<string, { count: number; amount: number }> = {};
-
-    activeLoans.forEach((l) => {
-      const client = clients.find((c) => c.id === l.clientId);
-      const prov = client?.province || 'Desconhecido';
-
-      if (!provinces[prov]) provinces[prov] = { count: 0, amount: 0 };
-      provinces[prov].count++;
-      provinces[prov].amount += l.outstandingPrincipal;
-    });
-
-    return Object.entries(provinces)
-      .map(([name, data]) => ({ name, ...data }))
-      .sort((a, b) => b.amount - a.amount)
-      .slice(0, 8);
-  }, [activeLoans, clients]);
-
-  const handleExport = useCallback(
-    (type: string) => {
-      let data: Record<string, unknown>[] = [];
-      let filename = '';
-
-      switch (type) {
-        case 'portfolio':
-          data = activeLoans.map((l) => {
-            const client = clients.find((c) => c.id === l.clientId);
-            return {
-              'Nº Empréstimo': l.loanNumber,
-              Cliente: client?.fullName || '',
-              BI: client?.biNumber || '',
-              Província: client?.province || '',
-              'Capital Original': l.principalAmount,
-              'Saldo Devedor': l.outstandingPrincipal,
-              'Dias Atraso': l.daysOverdue,
-              Estado: l.status === 'overdue' ? 'Em Atraso' : 'Activo',
-              'Próx. Vencimento': l.nextPaymentDate || '',
-              Analista: users.find((u) => u.id === l.analystId)?.fullName || '',
-            };
-          });
-          filename = 'Relatorio_Carteira';
-          break;
-
-        case 'disbursements':
-          data = filteredDisbursements.map((d) => {
-            const client = clients.find((c) => c.id === d.clientId);
-            return {
-              Data: new Date(d.disbursedAt).toLocaleDateString('pt-MZ'),
-              Cliente: client?.fullName || '',
-              'Valor Bruto': d.grossAmount,
-              'Taxa Admin': d.adminFee,
-              'Valor Líquido': d.netAmount,
-              Método: d.method,
-              Referência: d.reference || '',
-            };
-          });
-          filename = 'Relatorio_Desembolsos';
-          break;
-
-        case 'payments':
-          data = filteredPayments.map((p) => {
-            const client = clients.find((c) => c.id === p.clientId);
-            return {
-              Recibo: p.receiptNumber || '',
-              Data: new Date(p.paymentDate).toLocaleDateString('pt-MZ'),
-              Cliente: client?.fullName || '',
-              'Valor Total': p.amount,
-              Capital: p.principalPaid,
-              Juros: p.interestPaid,
-              Multa: p.penaltyPaid,
-              Método: p.paymentMethod,
-            };
-          });
-          filename = 'Relatorio_Pagamentos';
-          break;
-
-        case 'aging':
-          data = activeLoans
-            .sort((a, b) => b.daysOverdue - a.daysOverdue)
-            .map((l) => {
-              const client = clients.find((c) => c.id === l.clientId);
-              const bucket =
-                l.daysOverdue === 0
-                  ? 'Em Dia'
-                  : l.daysOverdue <= 30
-                  ? '1-30 dias'
-                  : l.daysOverdue <= 60
-                  ? '31-60 dias'
-                  : l.daysOverdue <= 90
-                  ? '61-90 dias'
-                  : '90+ dias';
-
-              return {
-                'Nº Empréstimo': l.loanNumber,
-                Cliente: client?.fullName || '',
-                Telefone: client?.phone || '',
-                'Capital Original': l.principalAmount,
-                'Saldo Devedor': l.outstandingPrincipal,
-                'Dias Atraso': l.daysOverdue,
-                Faixa: bucket,
-                'Próx. Vencimento': l.nextPaymentDate || '',
-              };
-            });
-          filename = 'Relatorio_Aging_Carteira';
-          break;
-      }
-
-      if (data.length === 0) {
-        toast({
-          title: 'Sem dados',
-          description: 'Não há dados para exportar no período seleccionado',
-          variant: 'destructive',
-        });
-        return;
-      }
-
-      exportService.exportToCSV(data, filename);
-      toast({
-        title: 'Relatório exportado',
-        description: `${filename}.csv descarregado com sucesso`,
-      });
-    },
-    [activeLoans, clients, users, filteredDisbursements, filteredPayments, toast]
-  );
-
   const reportDate = new Date().toLocaleDateString('pt-MZ', {
     day: '2-digit',
     month: 'long',
@@ -645,16 +586,239 @@ export default function Relatorios() {
     year: 'numeric',
   })}`;
 
+  const buildExportData = useCallback(
+    (type: string): {
+      data: ExportRow[];
+      filename: string;
+      excelSheetName: string;
+      excelTitle: string;
+      columns: ExportColumn<ExportRow>[];
+    } => {
+      switch (type) {
+        case 'portfolio': {
+          const data = activeLoans.map((l) => {
+            const client = clients.find((c) => c.id === l.clientId);
+            return {
+              loanNumber: l.loanNumber,
+              client: client?.fullName || '',
+              bi: client?.biNumber || '',
+              province: client?.province || '',
+              principal: l.principalAmount,
+              outstanding: l.outstandingPrincipal,
+              daysOverdue: l.daysOverdue,
+              status: l.status === 'overdue' ? 'Em Atraso' : 'Activo',
+              nextDueDate: l.nextPaymentDate || '',
+              analyst: users.find((u) => u.id === l.analystId)?.fullName || '',
+            };
+          });
+
+          const columns: ExportColumn<ExportRow>[] = [
+            { key: 'loanNumber', label: 'Nº Empréstimo', width: 18 },
+            { key: 'client', label: 'Cliente', width: 26 },
+            { key: 'bi', label: 'BI', width: 18 },
+            { key: 'province', label: 'Província', width: 18 },
+            { key: 'principal', label: 'Capital Original', width: 18, format: 'currency' },
+            { key: 'outstanding', label: 'Saldo Devedor', width: 18, format: 'currency' },
+            { key: 'daysOverdue', label: 'Dias Atraso', width: 14, format: 'number' },
+            { key: 'status', label: 'Estado', width: 16 },
+            { key: 'nextDueDate', label: 'Próx. Vencimento', width: 16, format: 'date' },
+            { key: 'analyst', label: 'Analista', width: 22 },
+          ];
+
+          return {
+            data,
+            filename: 'Relatorio_Carteira',
+            excelSheetName: 'Carteira',
+            excelTitle: 'Relatório de Carteira de Crédito',
+            columns,
+          };
+        }
+
+        case 'aging': {
+          const data = activeLoans
+            .sort((a, b) => b.daysOverdue - a.daysOverdue)
+            .map((l) => {
+              const client = clients.find((c) => c.id === l.clientId);
+              const bucket =
+                l.daysOverdue === 0
+                  ? 'Em Dia'
+                  : l.daysOverdue <= 30
+                  ? '1-30 dias'
+                  : l.daysOverdue <= 60
+                  ? '31-60 dias'
+                  : l.daysOverdue <= 90
+                  ? '61-90 dias'
+                  : '90+ dias';
+
+              return {
+                loanNumber: l.loanNumber,
+                client: client?.fullName || '',
+                phone: client?.phone || '',
+                principal: l.principalAmount,
+                outstanding: l.outstandingPrincipal,
+                daysOverdue: l.daysOverdue,
+                bucket,
+                nextDueDate: l.nextPaymentDate || '',
+              };
+            });
+
+          const columns: ExportColumn<ExportRow>[] = [
+            { key: 'loanNumber', label: 'Nº Empréstimo', width: 18 },
+            { key: 'client', label: 'Cliente', width: 26 },
+            { key: 'phone', label: 'Telefone', width: 18 },
+            { key: 'principal', label: 'Capital Original', width: 18, format: 'currency' },
+            { key: 'outstanding', label: 'Saldo Devedor', width: 18, format: 'currency' },
+            { key: 'daysOverdue', label: 'Dias Atraso', width: 14, format: 'number' },
+            { key: 'bucket', label: 'Faixa', width: 16 },
+            { key: 'nextDueDate', label: 'Próx. Vencimento', width: 16, format: 'date' },
+          ];
+
+          return {
+            data,
+            filename: 'Relatorio_Aging_Carteira',
+            excelSheetName: 'Aging',
+            excelTitle: 'Relatório de Aging da Carteira',
+            columns,
+          };
+        }
+
+        case 'disbursements': {
+          const data = filteredDisbursements.map((d) => {
+            const client = clients.find((c) => c.id === d.clientId);
+            return {
+              date: new Date(d.disbursedAt).toLocaleDateString('pt-MZ'),
+              client: client?.fullName || '',
+              grossAmount: d.grossAmount,
+              adminFee: d.adminFee,
+              netAmount: d.netAmount,
+              method: d.method,
+              reference: d.reference || '',
+            };
+          });
+
+          const columns: ExportColumn<ExportRow>[] = [
+            { key: 'date', label: 'Data', width: 14, format: 'date' },
+            { key: 'client', label: 'Cliente', width: 28 },
+            { key: 'grossAmount', label: 'Valor Bruto', width: 18, format: 'currency' },
+            { key: 'adminFee', label: 'Taxa Admin', width: 16, format: 'currency' },
+            { key: 'netAmount', label: 'Valor Líquido', width: 18, format: 'currency' },
+            { key: 'method', label: 'Método', width: 18 },
+            { key: 'reference', label: 'Referência', width: 22 },
+          ];
+
+          return {
+            data,
+            filename: 'Relatorio_Desembolsos',
+            excelSheetName: 'Desembolsos',
+            excelTitle: 'Relatório de Desembolsos',
+            columns,
+          };
+        }
+
+        case 'payments': {
+          const data = filteredPayments.map((p) => {
+            const client = clients.find((c) => c.id === p.clientId);
+            return {
+              receipt: p.receiptNumber || '',
+              date: new Date(p.paymentDate).toLocaleDateString('pt-MZ'),
+              client: client?.fullName || '',
+              totalAmount: p.amount,
+              principalPaid: p.principalPaid,
+              interestPaid: p.interestPaid,
+              penaltyPaid: p.penaltyPaid,
+              method: p.paymentMethod,
+            };
+          });
+
+          const columns: ExportColumn<ExportRow>[] = [
+            { key: 'receipt', label: 'Recibo', width: 16 },
+            { key: 'date', label: 'Data', width: 14, format: 'date' },
+            { key: 'client', label: 'Cliente', width: 28 },
+            { key: 'totalAmount', label: 'Valor Total', width: 18, format: 'currency' },
+            { key: 'principalPaid', label: 'Capital', width: 18, format: 'currency' },
+            { key: 'interestPaid', label: 'Juros', width: 18, format: 'currency' },
+            { key: 'penaltyPaid', label: 'Multa', width: 18, format: 'currency' },
+            { key: 'method', label: 'Método', width: 18 },
+          ];
+
+          return {
+            data,
+            filename: 'Relatorio_Pagamentos',
+            excelSheetName: 'Pagamentos',
+            excelTitle: 'Relatório de Pagamentos',
+            columns,
+          };
+        }
+
+        default:
+          return {
+            data: [],
+            filename: '',
+            excelSheetName: 'Relatório',
+            excelTitle: 'Relatório',
+            columns: [],
+          };
+      }
+    },
+    [activeLoans, clients, users, filteredDisbursements, filteredPayments]
+  );
+
+  const handleExportCSV = useCallback(
+    (type: string) => {
+      const { data, filename, columns } = buildExportData(type);
+
+      if (data.length === 0) {
+        toast({
+          title: 'Sem dados',
+          description: 'Não há dados para exportar no período seleccionado',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      exportService.exportToCSV(data, filename, columns);
+
+      toast({
+        title: 'CSV exportado',
+        description: `${filename}.csv descarregado com sucesso`,
+      });
+    },
+    [buildExportData, toast]
+  );
+
+  const handleExportExcel = useCallback(
+    async (type: string) => {
+      const { data, filename, columns, excelSheetName, excelTitle } = buildExportData(type);
+
+      if (data.length === 0) {
+        toast({
+          title: 'Sem dados',
+          description: 'Não há dados para exportar no período seleccionado',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      await exportService.exportToExcel(data, filename, {
+        sheetName: excelSheetName,
+        title: excelTitle,
+        subtitle: `Período: ${periodLabel}`,
+        columns,
+      });
+
+      toast({
+        title: 'Excel exportado',
+        description: `${filename}.xlsx gerado com sucesso`,
+      });
+    },
+    [buildExportData, periodLabel, toast]
+  );
+
   const handleExportPDF = useCallback(() => {
     const reportData: ReportData = {
       period: periodLabel,
       emittedBy: user?.fullName || 'Sistema',
-      emitterRole:
-        user?.role === 'admin'
-          ? 'Administrador'
-          : user?.role === 'analyst'
-          ? 'Analista de Crédito'
-          : 'Caixa',
+      emitterRole: user?.role ? roleLabels[user.role] : 'Sistema',
       summary: {
         totalPortfolio: executiveSummary.totalPortfolio,
         activeLoans: portfolioStats.totalActiveLoans,
@@ -712,7 +876,19 @@ export default function Relatorios() {
       title: 'Relatório PDF exportado',
       description: 'Relatório institucional descarregado com sucesso',
     });
-  }, [periodLabel, executiveSummary, portfolioStats, agingData, provinceData, productPerformance, analystPerformance, activeLoans, clients, user, toast]);
+  }, [
+    periodLabel,
+    user,
+    executiveSummary,
+    portfolioStats,
+    agingData,
+    provinceData,
+    productPerformance,
+    analystPerformance,
+    activeLoans,
+    clients,
+    toast,
+  ]);
 
   if (loading) {
     return <div className="p-6">A carregar relatórios...</div>;
@@ -720,28 +896,30 @@ export default function Relatorios() {
 
   return (
     <div className="space-y-6 max-w-[1400px] mx-auto">
-      <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="relative">
+      <motion.div
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="relative"
+      >
         <div className="flex items-start justify-between">
           <div>
             <div className="flex items-center gap-2 mb-1">
               <Building2 className="w-6 h-6 text-primary" />
-              <h1 className="text-2xl font-bold tracking-tight">Relatórios Institucionais</h1>
+              <h1 className="text-2xl font-bold tracking-tight">
+                Relatórios Institucionais
+              </h1>
             </div>
             <p className="text-muted-foreground text-sm">
-              MicroLoan Hub • Relatório gerado em {reportDate} • Período: {periodLabel}
+              MicroLoan Hub • Relatório gerado em {reportDate} • Período:{' '}
+              {periodLabel}
             </p>
             {user && (
               <p className="text-xs text-muted-foreground mt-0.5">
-                Emitido por: {user.fullName} (
-                {user.role === 'admin'
-                  ? 'Administrador'
-                  : user.role === 'analyst'
-                  ? 'Analista de Crédito'
-                  : 'Caixa/Tesouraria'}
-                )
+                Emitido por: {user.fullName} ({roleLabels[user.role]})
               </p>
             )}
           </div>
+
           <div className="flex items-center gap-2">
             <Badge variant="outline" className="text-xs">
               <Shield className="w-3 h-3 mr-1" />
@@ -775,43 +953,89 @@ export default function Relatorios() {
 
             <div>
               <Label className="text-xs font-medium">De</Label>
-              <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="w-40" />
+              <Input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                className="w-40"
+              />
             </div>
 
             <div>
               <Label className="text-xs font-medium">Até</Label>
-              <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="w-40" />
+              <Input
+                type="date"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                className="w-40"
+              />
             </div>
 
-            <div className="flex gap-2 ml-auto flex-wrap">
-              <Button size="sm" onClick={handleExportPDF} className="bg-primary text-primary-foreground">
-                <Printer className="w-3.5 h-3.5 mr-1.5" />
-                Relatório PDF
-              </Button>
-
-              <Button variant="outline" size="sm" onClick={() => handleExport('portfolio')}>
-                <Download className="w-3.5 h-3.5 mr-1.5" />
-                Carteira CSV
-              </Button>
-
-              <Button variant="outline" size="sm" onClick={() => handleExport('aging')}>
-                <Download className="w-3.5 h-3.5 mr-1.5" />
-                Aging CSV
-              </Button>
-
-              {isCashier && (
-                <>
-                  <Button variant="outline" size="sm" onClick={() => handleExport('disbursements')}>
-                    <Download className="w-3.5 h-3.5 mr-1.5" />
-                    Desembolsos CSV
+            <div className="ml-auto">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button className="gap-2">
+                    <Download className="w-4 h-4" />
+                    Exportar
+                    <ChevronDown className="w-4 h-4" />
                   </Button>
+                </DropdownMenuTrigger>
 
-                  <Button variant="outline" size="sm" onClick={() => handleExport('payments')}>
-                    <Download className="w-3.5 h-3.5 mr-1.5" />
-                    Pagamentos CSV
-                  </Button>
-                </>
-              )}
+                <DropdownMenuContent align="end" className="w-72">
+                  <DropdownMenuItem onClick={handleExportPDF}>
+                    <Printer className="w-4 h-4 mr-2" />
+                    PDF Institucional
+                  </DropdownMenuItem>
+
+                  <DropdownMenuSeparator />
+
+                  <DropdownMenuItem onClick={() => void handleExportExcel('portfolio')}>
+                    <FileSpreadsheet className="w-4 h-4 mr-2" />
+                    Excel Formatado — Carteira
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => void handleExportExcel('aging')}>
+                    <FileSpreadsheet className="w-4 h-4 mr-2" />
+                    Excel Formatado — Aging
+                  </DropdownMenuItem>
+
+                  {isCashier && (
+                    <>
+                      <DropdownMenuItem onClick={() => void handleExportExcel('disbursements')}>
+                        <FileSpreadsheet className="w-4 h-4 mr-2" />
+                        Excel Formatado — Desembolsos
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => void handleExportExcel('payments')}>
+                        <FileSpreadsheet className="w-4 h-4 mr-2" />
+                        Excel Formatado — Pagamentos
+                      </DropdownMenuItem>
+                    </>
+                  )}
+
+                  <DropdownMenuSeparator />
+
+                  <DropdownMenuItem onClick={() => handleExportCSV('portfolio')}>
+                    <FileText className="w-4 h-4 mr-2" />
+                    CSV Simples — Carteira
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleExportCSV('aging')}>
+                    <FileText className="w-4 h-4 mr-2" />
+                    CSV Simples — Aging
+                  </DropdownMenuItem>
+
+                  {isCashier && (
+                    <>
+                      <DropdownMenuItem onClick={() => handleExportCSV('disbursements')}>
+                        <FileText className="w-4 h-4 mr-2" />
+                        CSV Simples — Desembolsos
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleExportCSV('payments')}>
+                        <FileText className="w-4 h-4 mr-2" />
+                        CSV Simples — Pagamentos
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
         </CardContent>
@@ -848,24 +1072,72 @@ export default function Relatorios() {
           />
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <MetricCard label="Carteira Activa Total" value={calcService.formatCurrency(executiveSummary.totalPortfolio)} />
-            <MetricCard label="Empréstimos Activos" value={portfolioStats.totalActiveLoans.toString()} />
-            <MetricCard label="Clientes Activos" value={executiveSummary.activeClients.toString()} />
-            <MetricCard label="Ticket Médio" value={calcService.formatCurrency(executiveSummary.avgLoanSize)} />
+            <MetricCard
+              label="Carteira Activa Total"
+              value={calcService.formatCurrency(executiveSummary.totalPortfolio)}
+            />
+            <MetricCard
+              label="Empréstimos Activos"
+              value={portfolioStats.totalActiveLoans.toString()}
+            />
+            <MetricCard
+              label="Clientes Activos"
+              value={executiveSummary.activeClients.toString()}
+            />
+            <MetricCard
+              label="Ticket Médio"
+              value={calcService.formatCurrency(executiveSummary.avgLoanSize)}
+            />
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <MetricCard label="Total Desembolsado" value={calcService.formatCurrency(executiveSummary.totalDisbursed)} variant="success" />
-            <MetricCard label="Total Recebido" value={calcService.formatCurrency(executiveSummary.totalReceived)} variant="success" />
-            <MetricCard label="PAR > 30 dias" value={calcService.formatPercentage(executiveSummary.par30)} variant={executiveSummary.par30 > 10 ? 'danger' : executiveSummary.par30 > 5 ? 'warning' : 'success'} />
-            <MetricCard label="Taxa de Inadimplência" value={calcService.formatPercentage(executiveSummary.delinquencyRate)} variant={executiveSummary.delinquencyRate > 10 ? 'danger' : 'default'} />
+            <MetricCard
+              label="Total Desembolsado"
+              value={calcService.formatCurrency(executiveSummary.totalDisbursed)}
+              variant="success"
+            />
+            <MetricCard
+              label="Total Recebido"
+              value={calcService.formatCurrency(executiveSummary.totalReceived)}
+              variant="success"
+            />
+            <MetricCard
+              label="PAR > 30 dias"
+              value={calcService.formatPercentage(executiveSummary.par30)}
+              variant={
+                executiveSummary.par30 > 10
+                  ? 'danger'
+                  : executiveSummary.par30 > 5
+                  ? 'warning'
+                  : 'success'
+              }
+            />
+            <MetricCard
+              label="Taxa de Inadimplência"
+              value={calcService.formatPercentage(executiveSummary.delinquencyRate)}
+              variant={executiveSummary.delinquencyRate > 10 ? 'danger' : 'default'}
+            />
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <MetricCard label="Solicitações Recebidas" value={executiveSummary.totalSubmitted.toString()} />
-            <MetricCard label="Aprovadas" value={executiveSummary.totalApproved.toString()} variant="success" />
-            <MetricCard label="Rejeitadas" value={executiveSummary.totalRejected.toString()} variant="danger" />
-            <MetricCard label="Taxa de Aprovação" value={calcService.formatPercentage(executiveSummary.approvalRate)} />
+            <MetricCard
+              label="Solicitações Recebidas"
+              value={executiveSummary.totalSubmitted.toString()}
+            />
+            <MetricCard
+              label="Aprovadas"
+              value={executiveSummary.totalApproved.toString()}
+              variant="success"
+            />
+            <MetricCard
+              label="Rejeitadas"
+              value={executiveSummary.totalRejected.toString()}
+              variant="danger"
+            />
+            <MetricCard
+              label="Taxa de Aprovação"
+              value={calcService.formatPercentage(executiveSummary.approvalRate)}
+            />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -881,17 +1153,53 @@ export default function Relatorios() {
                     <ComposedChart data={monthlyTrendData}>
                       <defs>
                         <linearGradient id="gradDisb" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor={CHART_COLORS.primary} stopOpacity={0.2} />
-                          <stop offset="95%" stopColor={CHART_COLORS.primary} stopOpacity={0} />
+                          <stop
+                            offset="5%"
+                            stopColor={CHART_COLORS.primary}
+                            stopOpacity={0.2}
+                          />
+                          <stop
+                            offset="95%"
+                            stopColor={CHART_COLORS.primary}
+                            stopOpacity={0}
+                          />
                         </linearGradient>
                       </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                      <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={11} />
-                      <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
-                      <RechartsTooltip contentStyle={CustomTooltipStyle} formatter={(v: number) => calcService.formatCurrency(v)} />
+                      <CartesianGrid
+                        strokeDasharray="3 3"
+                        stroke="hsl(var(--border))"
+                      />
+                      <XAxis
+                        dataKey="name"
+                        stroke="hsl(var(--muted-foreground))"
+                        fontSize={11}
+                      />
+                      <YAxis
+                        stroke="hsl(var(--muted-foreground))"
+                        fontSize={11}
+                        tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`}
+                      />
+                      <RechartsTooltip
+                        contentStyle={CustomTooltipStyle}
+                        formatter={(v: number) => calcService.formatCurrency(v)}
+                      />
                       <Legend wrapperStyle={{ fontSize: '12px' }} />
-                      <Area type="monotone" dataKey="desembolsado" fill="url(#gradDisb)" stroke={CHART_COLORS.primary} strokeWidth={2} name="Desembolsado" />
-                      <Line type="monotone" dataKey="recebido" stroke={CHART_COLORS.success} strokeWidth={2.5} dot={{ r: 3 }} name="Recebido" />
+                      <Area
+                        type="monotone"
+                        dataKey="desembolsado"
+                        fill="url(#gradDisb)"
+                        stroke={CHART_COLORS.primary}
+                        strokeWidth={2}
+                        name="Desembolsado"
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="recebido"
+                        stroke={CHART_COLORS.success}
+                        strokeWidth={2.5}
+                        dot={{ r: 3 }}
+                        name="Recebido"
+                      />
                     </ComposedChart>
                   </ResponsiveContainer>
                 </div>
@@ -900,7 +1208,9 @@ export default function Relatorios() {
 
             <Card className="card-elevated">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-semibold">Aging da Carteira</CardTitle>
+                <CardTitle className="text-sm font-semibold">
+                  Aging da Carteira
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="h-52">
@@ -919,18 +1229,113 @@ export default function Relatorios() {
                           <Cell key={i} fill={entry.fill} />
                         ))}
                       </Pie>
-                      <RechartsTooltip contentStyle={CustomTooltipStyle} formatter={(v: number) => calcService.formatCurrency(v)} />
+                      <RechartsTooltip
+                        contentStyle={CustomTooltipStyle}
+                        formatter={(v: number) => calcService.formatCurrency(v)}
+                      />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
 
                 <div className="flex flex-wrap gap-2 justify-center">
                   {agingData.map((e) => (
-                    <div key={e.name} className="flex items-center gap-1.5 text-xs">
-                      <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: e.fill }} />
+                    <div
+                      key={e.name}
+                      className="flex items-center gap-1.5 text-xs"
+                    >
+                      <div
+                        className="w-2.5 h-2.5 rounded-full"
+                        style={{ backgroundColor: e.fill }}
+                      />
                       <span className="text-muted-foreground">{e.name}</span>
                     </div>
                   ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Card className="card-elevated">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-semibold">
+                  Composição de Receitas
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="h-52">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={monthlyTrendData} layout="vertical">
+                      <CartesianGrid
+                        strokeDasharray="3 3"
+                        stroke="hsl(var(--border))"
+                      />
+                      <XAxis
+                        type="number"
+                        fontSize={11}
+                        tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`}
+                      />
+                      <YAxis
+                        type="category"
+                        dataKey="name"
+                        fontSize={11}
+                        width={50}
+                      />
+                      <RechartsTooltip
+                        contentStyle={CustomTooltipStyle}
+                        formatter={(v: number) => calcService.formatCurrency(v)}
+                      />
+                      <Legend wrapperStyle={{ fontSize: '11px' }} />
+                      <Bar
+                        dataKey="capital"
+                        stackId="a"
+                        fill={CHART_COLORS.primary}
+                        name="Capital"
+                      />
+                      <Bar
+                        dataKey="juros"
+                        stackId="a"
+                        fill={CHART_COLORS.accent}
+                        name="Juros"
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="card-elevated">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-semibold">
+                  Métodos de Pagamento
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="h-52">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={paymentMethodData}
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={75}
+                        dataKey="value"
+                        label={({ name, percent }) =>
+                          `${name} ${((percent || 0) * 100).toFixed(0)}%`
+                        }
+                        labelLine={false}
+                        fontSize={10}
+                      >
+                        {paymentMethodData.map((e, i) => (
+                          <Cell key={i} fill={e.fill} />
+                        ))}
+                      </Pie>
+                      <RechartsTooltip
+                        contentStyle={CustomTooltipStyle}
+                        formatter={(v: number) => calcService.formatCurrency(v)}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
                 </div>
               </CardContent>
             </Card>
@@ -945,52 +1350,169 @@ export default function Relatorios() {
           />
 
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-            <MetricCard label="Carteira Total" value={calcService.formatCurrency(portfolioStats.totalActiveAmount)} />
-            <MetricCard label="Em Dia" value={calcService.formatCurrency(portfolioStats.agingBuckets.current)} variant="success" />
-            <MetricCard label="PAR > 30" value={calcService.formatPercentage(executiveSummary.par30)} variant={executiveSummary.par30 > 10 ? 'danger' : 'warning'} />
-            <MetricCard label="PAR > 90" value={calcService.formatPercentage(executiveSummary.par90)} variant={executiveSummary.par90 > 5 ? 'danger' : 'default'} />
-            <MetricCard label="Empréstimos em Atraso" value={portfolioStats.totalOverdueLoans.toString()} variant="danger" />
+            <MetricCard
+              label="Carteira Total"
+              value={calcService.formatCurrency(portfolioStats.totalActiveAmount)}
+            />
+            <MetricCard
+              label="Em Dia"
+              value={calcService.formatCurrency(portfolioStats.agingBuckets.current)}
+              variant="success"
+            />
+            <MetricCard
+              label="PAR > 30"
+              value={calcService.formatPercentage(executiveSummary.par30)}
+              variant={executiveSummary.par30 > 10 ? 'danger' : 'warning'}
+            />
+            <MetricCard
+              label="PAR > 90"
+              value={calcService.formatPercentage(executiveSummary.par90)}
+              variant={executiveSummary.par90 > 5 ? 'danger' : 'default'}
+            />
+            <MetricCard
+              label="Empréstimos em Atraso"
+              value={portfolioStats.totalOverdueLoans.toString()}
+              variant="danger"
+            />
           </div>
 
           <Card className="card-elevated">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-semibold">Mapa de Aging Detalhado</CardTitle>
+              <CardTitle className="text-sm font-semibold">
+                Evolução do PAR (6 meses)
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={parTrendData}>
+                    <defs>
+                      <linearGradient id="gradPar" x1="0" y1="0" x2="0" y2="1">
+                        <stop
+                          offset="5%"
+                          stopColor={CHART_COLORS.danger}
+                          stopOpacity={0.15}
+                        />
+                        <stop
+                          offset="95%"
+                          stopColor={CHART_COLORS.danger}
+                          stopOpacity={0}
+                        />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      stroke="hsl(var(--border))"
+                    />
+                    <XAxis dataKey="name" fontSize={11} />
+                    <YAxis
+                      fontSize={11}
+                      tickFormatter={(v) => `${Number(v).toFixed(0)}%`}
+                    />
+                    <RechartsTooltip
+                      contentStyle={CustomTooltipStyle}
+                      formatter={(v: number) => `${v.toFixed(1)}%`}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="par"
+                      stroke={CHART_COLORS.danger}
+                      fill="url(#gradPar)"
+                      strokeWidth={2}
+                      name="PAR %"
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="card-elevated">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-semibold">
+                Mapa de Aging Detalhado
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead className="text-xs">Faixa de Atraso</TableHead>
-                    <TableHead className="text-xs text-right">Nº Empréstimos</TableHead>
-                    <TableHead className="text-xs text-right">Saldo Devedor</TableHead>
-                    <TableHead className="text-xs text-right">% da Carteira</TableHead>
+                    <TableHead className="text-xs text-right">
+                      Nº Empréstimos
+                    </TableHead>
+                    <TableHead className="text-xs text-right">
+                      Saldo Devedor
+                    </TableHead>
+                    <TableHead className="text-xs text-right">
+                      % da Carteira
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {[
-                    { label: 'Em Dia (0 dias)', loans: activeLoans.filter((l) => l.daysOverdue === 0) },
-                    { label: '1–30 dias', loans: activeLoans.filter((l) => l.daysOverdue > 0 && l.daysOverdue <= 30) },
-                    { label: '31–60 dias', loans: activeLoans.filter((l) => l.daysOverdue > 30 && l.daysOverdue <= 60) },
-                    { label: '61–90 dias', loans: activeLoans.filter((l) => l.daysOverdue > 60 && l.daysOverdue <= 90) },
-                    { label: '90+ dias', loans: activeLoans.filter((l) => l.daysOverdue > 90) },
+                    {
+                      label: 'Em Dia (0 dias)',
+                      loans: activeLoans.filter((l) => l.daysOverdue === 0),
+                    },
+                    {
+                      label: '1–30 dias',
+                      loans: activeLoans.filter(
+                        (l) => l.daysOverdue > 0 && l.daysOverdue <= 30
+                      ),
+                    },
+                    {
+                      label: '31–60 dias',
+                      loans: activeLoans.filter(
+                        (l) => l.daysOverdue > 30 && l.daysOverdue <= 60
+                      ),
+                    },
+                    {
+                      label: '61–90 dias',
+                      loans: activeLoans.filter(
+                        (l) => l.daysOverdue > 60 && l.daysOverdue <= 90
+                      ),
+                    },
+                    {
+                      label: '90+ dias',
+                      loans: activeLoans.filter((l) => l.daysOverdue > 90),
+                    },
                   ].map((bucket) => {
-                    const amount = bucket.loans.reduce((s, l) => s + l.outstandingPrincipal, 0);
-                    const pct = portfolioStats.totalActiveAmount > 0 ? (amount / portfolioStats.totalActiveAmount) * 100 : 0;
+                    const amount = bucket.loans.reduce(
+                      (s, l) => s + l.outstandingPrincipal,
+                      0
+                    );
+                    const pct =
+                      portfolioStats.totalActiveAmount > 0
+                        ? (amount / portfolioStats.totalActiveAmount) * 100
+                        : 0;
 
                     return (
                       <TableRow key={bucket.label}>
-                        <TableCell className="text-sm font-medium">{bucket.label}</TableCell>
-                        <TableCell className="text-sm text-right">{bucket.loans.length}</TableCell>
-                        <TableCell className="text-sm text-right">{calcService.formatCurrency(amount)}</TableCell>
-                        <TableCell className="text-sm text-right">{pct.toFixed(1)}%</TableCell>
+                        <TableCell className="text-sm font-medium">
+                          {bucket.label}
+                        </TableCell>
+                        <TableCell className="text-sm text-right">
+                          {bucket.loans.length}
+                        </TableCell>
+                        <TableCell className="text-sm text-right">
+                          {calcService.formatCurrency(amount)}
+                        </TableCell>
+                        <TableCell className="text-sm text-right">
+                          {pct.toFixed(1)}%
+                        </TableCell>
                       </TableRow>
                     );
                   })}
 
                   <TableRow className="font-bold border-t-2">
                     <TableCell>TOTAL</TableCell>
-                    <TableCell className="text-right">{activeLoans.length}</TableCell>
-                    <TableCell className="text-right">{calcService.formatCurrency(portfolioStats.totalActiveAmount)}</TableCell>
+                    <TableCell className="text-right">
+                      {activeLoans.length}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {calcService.formatCurrency(portfolioStats.totalActiveAmount)}
+                    </TableCell>
                     <TableCell className="text-right">100%</TableCell>
                   </TableRow>
                 </TableBody>
@@ -1000,28 +1522,51 @@ export default function Relatorios() {
 
           <Card className="card-elevated">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-semibold">Qualidade por Produto de Crédito</CardTitle>
+              <CardTitle className="text-sm font-semibold">
+                Qualidade por Produto de Crédito
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead className="text-xs">Produto</TableHead>
-                    <TableHead className="text-xs text-right">Empréstimos</TableHead>
+                    <TableHead className="text-xs text-right">
+                      Empréstimos
+                    </TableHead>
                     <TableHead className="text-xs text-right">Carteira</TableHead>
-                    <TableHead className="text-xs text-right">Em Atraso</TableHead>
+                    <TableHead className="text-xs text-right">
+                      Em Atraso
+                    </TableHead>
                     <TableHead className="text-xs text-right">PAR %</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {productPerformance.map((p) => (
                     <TableRow key={p.id}>
-                      <TableCell className="text-sm font-medium">{p.name}</TableCell>
-                      <TableCell className="text-sm text-right">{p.active}</TableCell>
-                      <TableCell className="text-sm text-right">{calcService.formatCurrency(p.portfolio)}</TableCell>
-                      <TableCell className="text-sm text-right text-destructive">{calcService.formatCurrency(p.overdue)}</TableCell>
+                      <TableCell className="text-sm font-medium">
+                        {p.name}
+                      </TableCell>
                       <TableCell className="text-sm text-right">
-                        <Badge variant={p.par > 10 ? 'destructive' : p.par > 5 ? 'secondary' : 'default'} className="text-xs">
+                        {p.active}
+                      </TableCell>
+                      <TableCell className="text-sm text-right">
+                        {calcService.formatCurrency(p.portfolio)}
+                      </TableCell>
+                      <TableCell className="text-sm text-right text-destructive">
+                        {calcService.formatCurrency(p.overdue)}
+                      </TableCell>
+                      <TableCell className="text-sm text-right">
+                        <Badge
+                          variant={
+                            p.par > 10
+                              ? 'destructive'
+                              : p.par > 5
+                              ? 'secondary'
+                              : 'default'
+                          }
+                          className="text-xs"
+                        >
                           {p.par.toFixed(1)}%
                         </Badge>
                       </TableCell>
@@ -1042,10 +1587,154 @@ export default function Relatorios() {
             />
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <MetricCard label="Desembolsado (Período)" value={calcService.formatCurrency(executiveSummary.totalDisbursed)} />
-              <MetricCard label="Nº Desembolsos" value={filteredDisbursements.length.toString()} />
-              <MetricCard label="Recebido (Período)" value={calcService.formatCurrency(executiveSummary.totalReceived)} variant="success" />
-              <MetricCard label="Nº Pagamentos" value={filteredPayments.length.toString()} />
+              <MetricCard
+                label="Desembolsado (Período)"
+                value={calcService.formatCurrency(executiveSummary.totalDisbursed)}
+              />
+              <MetricCard
+                label="Nº Desembolsos"
+                value={filteredDisbursements.length.toString()}
+              />
+              <MetricCard
+                label="Recebido (Período)"
+                value={calcService.formatCurrency(executiveSummary.totalReceived)}
+                variant="success"
+              />
+              <MetricCard
+                label="Nº Pagamentos"
+                value={filteredPayments.length.toString()}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              <MetricCard
+                label="Capital Recebido"
+                value={calcService.formatCurrency(executiveSummary.principalReceived)}
+              />
+              <MetricCard
+                label="Juros Recebidos"
+                value={calcService.formatCurrency(executiveSummary.interestReceived)}
+                variant="success"
+              />
+              <MetricCard
+                label="Multas Recebidas"
+                value={calcService.formatCurrency(executiveSummary.penaltyReceived)}
+                variant="warning"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <Card className="card-elevated">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-semibold">
+                    Desembolsos por Dia
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-56">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={(() => {
+                          const grouped: Record<string, number> = {};
+                          filteredDisbursements.forEach((d) => {
+                            const dt = d.disbursedAt.split('T')[0];
+                            grouped[dt] = (grouped[dt] || 0) + d.netAmount;
+                          });
+                          return Object.entries(grouped)
+                            .map(([date, value]) => ({ date, value }))
+                            .sort((a, b) => a.date.localeCompare(b.date));
+                        })()}
+                      >
+                        <CartesianGrid
+                          strokeDasharray="3 3"
+                          stroke="hsl(var(--border))"
+                        />
+                        <XAxis
+                          dataKey="date"
+                          fontSize={10}
+                          tickFormatter={(v) =>
+                            new Date(v).toLocaleDateString('pt-MZ', {
+                              day: '2-digit',
+                              month: '2-digit',
+                            })
+                          }
+                        />
+                        <YAxis
+                          fontSize={10}
+                          tickFormatter={(v) => `${(Number(v) / 1000).toFixed(0)}k`}
+                        />
+                        <RechartsTooltip
+                          contentStyle={CustomTooltipStyle}
+                          formatter={(v: number) => calcService.formatCurrency(v)}
+                        />
+                        <Bar
+                          dataKey="value"
+                          fill={CHART_COLORS.primary}
+                          radius={[4, 4, 0, 0]}
+                          name="Desembolsado"
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="card-elevated">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-semibold">
+                    Pagamentos por Dia
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-56">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart
+                        data={(() => {
+                          const grouped: Record<string, number> = {};
+                          filteredPayments.forEach((p) => {
+                            const dt = p.paymentDate.split('T')[0];
+                            grouped[dt] = (grouped[dt] || 0) + p.amount;
+                          });
+                          return Object.entries(grouped)
+                            .map(([date, value]) => ({ date, value }))
+                            .sort((a, b) => a.date.localeCompare(b.date));
+                        })()}
+                      >
+                        <CartesianGrid
+                          strokeDasharray="3 3"
+                          stroke="hsl(var(--border))"
+                        />
+                        <XAxis
+                          dataKey="date"
+                          fontSize={10}
+                          tickFormatter={(v) =>
+                            new Date(v).toLocaleDateString('pt-MZ', {
+                              day: '2-digit',
+                              month: '2-digit',
+                            })
+                          }
+                        />
+                        <YAxis
+                          fontSize={10}
+                          tickFormatter={(v) => `${(Number(v) / 1000).toFixed(0)}k`}
+                        />
+                        <RechartsTooltip
+                          contentStyle={CustomTooltipStyle}
+                          formatter={(v: number) => calcService.formatCurrency(v)}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="value"
+                          stroke={CHART_COLORS.success}
+                          strokeWidth={2}
+                          dot={{ r: 3 }}
+                          name="Recebido"
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
           </TabsContent>
         )}
@@ -1060,7 +1749,9 @@ export default function Relatorios() {
 
             <Card className="card-elevated">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-semibold">Performance por Analista de Crédito</CardTitle>
+                <CardTitle className="text-sm font-semibold">
+                  Performance por Analista de Crédito
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <Table>
@@ -1068,37 +1759,156 @@ export default function Relatorios() {
                     <TableRow>
                       <TableHead className="text-xs">Analista</TableHead>
                       <TableHead className="text-xs">Perfil</TableHead>
-                      <TableHead className="text-xs text-right">Empréstimos</TableHead>
+                      <TableHead className="text-xs text-right">
+                        Empréstimos
+                      </TableHead>
                       <TableHead className="text-xs text-right">Carteira</TableHead>
-                      <TableHead className="text-xs text-right">Em Atraso</TableHead>
+                      <TableHead className="text-xs text-right">
+                        Em Atraso
+                      </TableHead>
                       <TableHead className="text-xs text-right">PAR %</TableHead>
-                      <TableHead className="text-xs text-right">Analisadas</TableHead>
-                      <TableHead className="text-xs text-right">Taxa Aprov.</TableHead>
+                      <TableHead className="text-xs text-right">
+                        Analisadas
+                      </TableHead>
+                      <TableHead className="text-xs text-right">
+                        Taxa Aprov.
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {analystPerformance.map((a) => (
                       <TableRow key={a.id}>
-                        <TableCell className="text-sm font-medium">{a.name}</TableCell>
+                        <TableCell className="text-sm font-medium">
+                          {a.name}
+                        </TableCell>
                         <TableCell>
                           <Badge variant="outline" className="text-xs capitalize">
                             {a.role === 'admin' ? 'Admin' : 'Analista'}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-sm text-right">{a.activeLoans}</TableCell>
-                        <TableCell className="text-sm text-right">{calcService.formatCurrency(a.portfolio)}</TableCell>
-                        <TableCell className="text-sm text-right text-destructive">{calcService.formatCurrency(a.overdue)}</TableCell>
                         <TableCell className="text-sm text-right">
-                          <Badge variant={a.par > 10 ? 'destructive' : a.par > 5 ? 'secondary' : 'default'} className="text-xs">
+                          {a.activeLoans}
+                        </TableCell>
+                        <TableCell className="text-sm text-right">
+                          {calcService.formatCurrency(a.portfolio)}
+                        </TableCell>
+                        <TableCell className="text-sm text-right text-destructive">
+                          {calcService.formatCurrency(a.overdue)}
+                        </TableCell>
+                        <TableCell className="text-sm text-right">
+                          <Badge
+                            variant={
+                              a.par > 10
+                                ? 'destructive'
+                                : a.par > 5
+                                ? 'secondary'
+                                : 'default'
+                            }
+                            className="text-xs"
+                          >
                             {a.par.toFixed(1)}%
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-sm text-right">{a.appsAnalysed}</TableCell>
-                        <TableCell className="text-sm text-right">{a.approvalRate.toFixed(0)}%</TableCell>
+                        <TableCell className="text-sm text-right">
+                          {a.appsAnalysed}
+                        </TableCell>
+                        <TableCell className="text-sm text-right">
+                          {a.approvalRate.toFixed(0)}%
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
+              </CardContent>
+            </Card>
+
+            <Card className="card-elevated">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-semibold">
+                  Comparativo de Carteira por Analista
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={analystPerformance}>
+                      <CartesianGrid
+                        strokeDasharray="3 3"
+                        stroke="hsl(var(--border))"
+                      />
+                      <XAxis dataKey="name" fontSize={11} />
+                      <YAxis
+                        fontSize={11}
+                        tickFormatter={(v) => `${(Number(v) / 1000).toFixed(0)}k`}
+                      />
+                      <RechartsTooltip
+                        contentStyle={CustomTooltipStyle}
+                        formatter={(v: number) => calcService.formatCurrency(v)}
+                      />
+                      <Legend wrapperStyle={{ fontSize: '11px' }} />
+                      <Bar
+                        dataKey="portfolio"
+                        fill={CHART_COLORS.primary}
+                        name="Carteira"
+                        radius={[4, 4, 0, 0]}
+                      />
+                      <Bar
+                        dataKey="overdue"
+                        fill={CHART_COLORS.danger}
+                        name="Em Atraso"
+                        radius={[4, 4, 0, 0]}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="card-elevated">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-semibold">
+                  Desempenho por Produto de Crédito
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={productPerformance} layout="vertical">
+                      <CartesianGrid
+                        strokeDasharray="3 3"
+                        stroke="hsl(var(--border))"
+                      />
+                      <XAxis
+                        type="number"
+                        fontSize={11}
+                        tickFormatter={(v) => `${(Number(v) / 1000).toFixed(0)}k`}
+                      />
+                      <YAxis
+                        type="category"
+                        dataKey="name"
+                        fontSize={11}
+                        width={120}
+                      />
+                      <RechartsTooltip
+                        contentStyle={CustomTooltipStyle}
+                        formatter={(v: number) => calcService.formatCurrency(v)}
+                      />
+                      <Legend wrapperStyle={{ fontSize: '11px' }} />
+                      <Bar
+                        dataKey="portfolio"
+                        fill={CHART_COLORS.primary}
+                        name="Carteira"
+                        radius={[0, 4, 4, 0]}
+                      />
+                      <Bar
+                        dataKey="overdue"
+                        fill={CHART_COLORS.warning}
+                        name="Em Atraso"
+                        radius={[0, 4, 4, 0]}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
@@ -1113,24 +1923,79 @@ export default function Relatorios() {
 
           <Card className="card-elevated">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-semibold">Detalhe por Província</CardTitle>
+              <CardTitle className="text-sm font-semibold">
+                Carteira por Província
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="h-72">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={provinceData}>
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      stroke="hsl(var(--border))"
+                    />
+                    <XAxis
+                      dataKey="name"
+                      fontSize={10}
+                      angle={-30}
+                      textAnchor="end"
+                      height={60}
+                    />
+                    <YAxis
+                      fontSize={11}
+                      tickFormatter={(v) => `${(Number(v) / 1000).toFixed(0)}k`}
+                    />
+                    <RechartsTooltip
+                      contentStyle={CustomTooltipStyle}
+                      formatter={(v: number) => calcService.formatCurrency(v)}
+                    />
+                    <Bar
+                      dataKey="amount"
+                      fill={CHART_COLORS.primary}
+                      radius={[4, 4, 0, 0]}
+                      name="Saldo Devedor"
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="card-elevated">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-semibold">
+                Detalhe por Província
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead className="text-xs">Província</TableHead>
-                    <TableHead className="text-xs text-right">Nº Empréstimos</TableHead>
-                    <TableHead className="text-xs text-right">Saldo Devedor</TableHead>
-                    <TableHead className="text-xs text-right">% da Carteira</TableHead>
+                    <TableHead className="text-xs text-right">
+                      Nº Empréstimos
+                    </TableHead>
+                    <TableHead className="text-xs text-right">
+                      Saldo Devedor
+                    </TableHead>
+                    <TableHead className="text-xs text-right">
+                      % da Carteira
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {provinceData.map((p) => (
                     <TableRow key={p.name}>
-                      <TableCell className="text-sm font-medium">{p.name}</TableCell>
-                      <TableCell className="text-sm text-right">{p.count}</TableCell>
-                      <TableCell className="text-sm text-right">{calcService.formatCurrency(p.amount)}</TableCell>
+                      <TableCell className="text-sm font-medium">
+                        {p.name}
+                      </TableCell>
+                      <TableCell className="text-sm text-right">
+                        {p.count}
+                      </TableCell>
+                      <TableCell className="text-sm text-right">
+                        {calcService.formatCurrency(p.amount)}
+                      </TableCell>
                       <TableCell className="text-sm text-right">
                         {portfolioStats.totalActiveAmount > 0
                           ? ((p.amount / portfolioStats.totalActiveAmount) * 100).toFixed(1)

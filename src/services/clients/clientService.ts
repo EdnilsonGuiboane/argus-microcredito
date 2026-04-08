@@ -1,4 +1,3 @@
-// src/services/clients/clientService.ts
 import { supabase } from '@/lib/supabase';
 import { mapClientFromDb } from '@/lib/mappers/clientMapper';
 import { Client } from '@/models/types';
@@ -115,6 +114,110 @@ function validateClientIdentity(payload: {
   }
 }
 
+function normalizeClientInsertPayload(
+  payload: ClientInsertPayload
+): ClientInsertPayload {
+  return {
+    ...payload,
+    full_name: payload.full_name.trim(),
+    phone: normalizePhone(payload.phone),
+    bi_number: normalizeBi(payload.bi_number),
+    nuit: payload.nuit ? normalizeNuit(payload.nuit) : null,
+    employer: payload.employer?.trim() || null,
+    occupation: payload.occupation.trim(),
+    reference1_name: payload.reference1_name.trim(),
+    reference1_phone: normalizePhone(payload.reference1_phone),
+    reference1_relationship: payload.reference1_relationship.trim(),
+    reference2_name: payload.reference2_name.trim(),
+    reference2_phone: normalizePhone(payload.reference2_phone),
+    reference2_relationship: payload.reference2_relationship.trim(),
+    notes: payload.notes?.trim() || null,
+    email: payload.email?.trim() || null,
+    address: payload.address.trim(),
+    province: payload.province.trim(),
+    district: payload.district.trim(),
+  };
+}
+
+function normalizeClientUpdatePayload(
+  payload: ClientUpdatePayload
+): ClientUpdatePayload {
+  return {
+    ...payload,
+    full_name: payload.full_name?.trim(),
+    phone: payload.phone !== undefined ? normalizePhone(payload.phone) : undefined,
+    bi_number:
+      payload.bi_number !== undefined ? normalizeBi(payload.bi_number) : undefined,
+    nuit:
+      payload.nuit !== undefined
+        ? payload.nuit
+          ? normalizeNuit(payload.nuit)
+          : null
+        : undefined,
+    employer:
+      payload.employer !== undefined ? payload.employer?.trim() || null : undefined,
+    occupation: payload.occupation !== undefined ? payload.occupation.trim() : undefined,
+    reference1_name:
+      payload.reference1_name !== undefined
+        ? payload.reference1_name.trim()
+        : undefined,
+    reference1_phone:
+      payload.reference1_phone !== undefined
+        ? normalizePhone(payload.reference1_phone)
+        : undefined,
+    reference1_relationship:
+      payload.reference1_relationship !== undefined
+        ? payload.reference1_relationship.trim()
+        : undefined,
+    reference2_name:
+      payload.reference2_name !== undefined
+        ? payload.reference2_name.trim()
+        : undefined,
+    reference2_phone:
+      payload.reference2_phone !== undefined
+        ? normalizePhone(payload.reference2_phone)
+        : undefined,
+    reference2_relationship:
+      payload.reference2_relationship !== undefined
+        ? payload.reference2_relationship.trim()
+        : undefined,
+    notes: payload.notes !== undefined ? payload.notes?.trim() || null : undefined,
+    email: payload.email !== undefined ? payload.email?.trim() || null : undefined,
+    address: payload.address !== undefined ? payload.address.trim() : undefined,
+    province: payload.province !== undefined ? payload.province.trim() : undefined,
+    district: payload.district !== undefined ? payload.district.trim() : undefined,
+  };
+}
+
+function mapClientConstraintError(error: { message?: string; code?: string } | null): string {
+  if (!error) {
+    return 'Erro ao guardar cliente.';
+  }
+
+  const msg = error.message || '';
+
+  if (msg.includes('clients_tenant_bi_number_unique_idx')) {
+    return 'Este BI já pertence a um outro cliente.';
+  }
+
+  if (msg.includes('clients_tenant_nuit_unique_idx')) {
+    return 'Este NUIT já pertence a um outro cliente.';
+  }
+
+  if (msg.includes('clients_tenant_phone_unique_idx')) {
+    return 'Este número de telefone já pertence a um outro cliente.';
+  }
+
+  if (
+    msg.includes('clients_tenant_full_name_unique_idx') ||
+    msg.includes('clients_tenant_full_name_lower_unique_idx')
+  ) {
+    return 'Este nome já pertence a um outro cliente.';
+  }
+
+  return msg || 'Erro ao guardar cliente.';
+}
+
 export class ClientService {
   async list(): Promise<Client[]> {
     const { data, error } = await supabase
@@ -144,14 +247,7 @@ export class ClientService {
   }
 
   async create(payload: ClientInsertPayload): Promise<Client> {
-    const normalizedPayload: ClientInsertPayload = {
-      ...payload,
-      phone: normalizePhone(payload.phone),
-      bi_number: normalizeBi(payload.bi_number),
-      nuit: payload.nuit ? normalizeNuit(payload.nuit) : null,
-      reference1_phone: normalizePhone(payload.reference1_phone),
-      reference2_phone: normalizePhone(payload.reference2_phone),
-    };
+    const normalizedPayload = normalizeClientInsertPayload(payload);
 
     validateClientIdentity({
       bi_number: normalizedPayload.bi_number,
@@ -174,7 +270,7 @@ export class ClientService {
     }
 
     if (existingBi) {
-      throw new Error(`BI já registado para: ${existingBi.full_name}`);
+      throw new Error(`Este BI já pertence ao cliente: ${existingBi.full_name}`);
     }
 
     // Check duplicate NUIT
@@ -191,8 +287,42 @@ export class ClientService {
       }
 
       if (existingNuit) {
-        throw new Error(`NUIT já registado para: ${existingNuit.full_name}`);
+        throw new Error(`Este NUIT já pertence ao cliente: ${existingNuit.full_name}`);
       }
+    }
+
+    // Check duplicate phone
+    const { data: existingPhone, error: phoneCheckError } = await supabase
+      .from('clients')
+      .select('id, full_name')
+      .eq('tenant_id', normalizedPayload.tenant_id)
+      .eq('phone', normalizedPayload.phone)
+      .maybeSingle();
+
+    if (phoneCheckError) {
+      throw new Error(phoneCheckError.message);
+    }
+
+    if (existingPhone) {
+      throw new Error(
+        `Este número de telefone já pertence ao cliente: ${existingPhone.full_name}`
+      );
+    }
+
+    // Check duplicate name
+    const { data: existingName, error: nameCheckError } = await supabase
+      .from('clients')
+      .select('id, full_name')
+      .eq('tenant_id', normalizedPayload.tenant_id)
+      .ilike('full_name', normalizedPayload.full_name)
+      .maybeSingle();
+
+    if (nameCheckError) {
+      throw new Error(nameCheckError.message);
+    }
+
+    if (existingName) {
+      throw new Error(`Este nome já pertence a um outro cliente: ${existingName.full_name}`);
     }
 
     const { data, error } = await supabase
@@ -202,7 +332,7 @@ export class ClientService {
       .single();
 
     if (error) {
-      throw new Error(error.message);
+      throw new Error(mapClientConstraintError(error));
     }
 
     return mapClientFromDb(data);
@@ -215,26 +345,7 @@ export class ClientService {
       throw new Error('Cliente não encontrado.');
     }
 
-    const normalizedPayload: ClientUpdatePayload = {
-      ...payload,
-      phone: payload.phone !== undefined ? normalizePhone(payload.phone) : undefined,
-      bi_number:
-        payload.bi_number !== undefined ? normalizeBi(payload.bi_number) : undefined,
-      nuit:
-        payload.nuit !== undefined
-          ? payload.nuit
-            ? normalizeNuit(payload.nuit)
-            : null
-          : undefined,
-      reference1_phone:
-        payload.reference1_phone !== undefined
-          ? normalizePhone(payload.reference1_phone)
-          : undefined,
-      reference2_phone:
-        payload.reference2_phone !== undefined
-          ? normalizePhone(payload.reference2_phone)
-          : undefined,
-    };
+    const normalizedPayload = normalizeClientUpdatePayload(payload);
 
     validateClientIdentity({
       bi_number: normalizedPayload.bi_number,
@@ -259,7 +370,7 @@ export class ClientService {
       }
 
       if (existingBi) {
-        throw new Error(`BI já registado para: ${existingBi.full_name}`);
+        throw new Error(`Este BI já pertence ao cliente: ${existingBi.full_name}`);
       }
     }
 
@@ -278,7 +389,49 @@ export class ClientService {
       }
 
       if (existingNuit) {
-        throw new Error(`NUIT já registado para: ${existingNuit.full_name}`);
+        throw new Error(`Este NUIT já pertence ao cliente: ${existingNuit.full_name}`);
+      }
+    }
+
+    // Check duplicate phone
+    if (normalizedPayload.phone) {
+      const { data: existingPhone, error: phoneCheckError } = await supabase
+        .from('clients')
+        .select('id, full_name')
+        .eq('tenant_id', current.tenantId)
+        .eq('phone', normalizedPayload.phone)
+        .neq('id', id)
+        .maybeSingle();
+
+      if (phoneCheckError) {
+        throw new Error(phoneCheckError.message);
+      }
+
+      if (existingPhone) {
+        throw new Error(
+          `Este número de telefone já pertence ao cliente: ${existingPhone.full_name}`
+        );
+      }
+    }
+
+    // Check duplicate name
+    if (normalizedPayload.full_name) {
+      const { data: existingName, error: nameCheckError } = await supabase
+        .from('clients')
+        .select('id, full_name')
+        .eq('tenant_id', current.tenantId)
+        .ilike('full_name', normalizedPayload.full_name)
+        .neq('id', id)
+        .maybeSingle();
+
+      if (nameCheckError) {
+        throw new Error(nameCheckError.message);
+      }
+
+      if (existingName) {
+        throw new Error(
+          `Este nome já pertence a um outro cliente: ${existingName.full_name}`
+        );
       }
     }
 
@@ -290,7 +443,7 @@ export class ClientService {
       .single();
 
     if (error) {
-      throw new Error(error.message);
+      throw new Error(mapClientConstraintError(error));
     }
 
     return mapClientFromDb(data);
