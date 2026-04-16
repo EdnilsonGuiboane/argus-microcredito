@@ -2,7 +2,6 @@ import { useState, useMemo, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   Receipt,
-  Search,
   Plus,
   Download,
   DollarSign,
@@ -51,7 +50,8 @@ export default function Pagamentos() {
   const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedLoan, setSelectedLoan] = useState<Loan | null>(null);
-  const [selectedInstallment, setSelectedInstallment] = useState<InstallmentPayment | null>(null);
+  const [selectedInstallment, setSelectedInstallment] =
+    useState<InstallmentPayment | null>(null);
   const [amount, setAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('mpesa');
   const [reference, setReference] = useState('');
@@ -64,8 +64,14 @@ export default function Pagamentos() {
   const [clients, setClients] = useState<Client[]>([]);
 
   useEffect(() => {
-    loadData();
+    void loadData();
   }, []);
+
+  useEffect(() => {
+    if (isModalOpen) {
+      void loadData();
+    }
+  }, [isModalOpen]);
 
   async function loadData() {
     try {
@@ -78,12 +84,22 @@ export default function Pagamentos() {
         paymentService.list(),
         clientService.list(),
       ]);
+      console.log('LOANS RAW PAGAMENTOS:', loansData);
+      console.log('PAYMENTS RAW PAGAMENTOS:', paymentsData);
 
-      const activeLoans = loansData.filter((l) =>
-        ['active', 'in_arrears'].includes(l.status)
-      );
+      const eligibleLoans = loansData.filter((loan) => {
+        const outstandingTotal =
+          (loan.outstandingPrincipal || 0) + (loan.outstandingInterest || 0);
 
-      setLoans(activeLoans);
+        const hasDisbursement = !!loan.disbursedAt;
+        const hasOutstanding = outstandingTotal > 0;
+        const isNotClosed =
+          loan.status !== 'closed' && loan.status !== 'cancelled';
+
+        return hasDisbursement && hasOutstanding && isNotClosed;
+      });
+
+      setLoans(eligibleLoans);
       setPayments(paymentsData);
       setClients(clientsData);
     } catch (error) {
@@ -127,7 +143,9 @@ export default function Pagamentos() {
     return payments.find(
       (p) =>
         p.loanId === loanId &&
-        (p.status === 'pending' || p.status === 'partial' || p.status === 'overdue')
+        (p.status === 'pending' ||
+          p.status === 'partial' ||
+          p.status === 'overdue')
     );
   };
 
@@ -136,7 +154,7 @@ export default function Pagamentos() {
 
     const paymentAmount = parseFloat(amount);
 
-    if (isNaN(paymentAmount) || paymentAmount <= 0) {
+    if (Number.isNaN(paymentAmount) || paymentAmount <= 0) {
       toast({
         title: 'Erro',
         description: 'Insira um valor válido.',
@@ -188,10 +206,13 @@ export default function Pagamentos() {
   const handleExportReceipt = (payment: InstallmentPayment) => {
     if (!user) return;
 
-    const client = getClient(payment.clientId);
-    const loan = getLoan(payment.loanId);
+    const paymentClient = clients.find((c) => c.id === payment.clientId);
 
-    if (!client || !loan) {
+    const paymentLoan =
+      loans.find((l) => l.id === payment.loanId) ||
+      null;
+
+    if (!paymentClient || !paymentLoan) {
       toast({
         title: 'Erro',
         description: 'Não foi possível localizar os dados do recibo.',
@@ -228,10 +249,10 @@ export default function Pagamentos() {
         notes: payment.notes,
         createdAt: payment.createdAt,
       },
-      loan,
-      client,
+      paymentLoan,
+      paymentClient,
       user.id,
-      user.fullName  || 'Sistema',
+      user.fullName || 'Sistema',
       roleLabel
     );
 
@@ -245,7 +266,10 @@ export default function Pagamentos() {
     const today = new Date().toDateString();
 
     return paymentsHistory
-      .filter((p) => new Date(p.paymentDate || p.updatedAt).toDateString() === today)
+      .filter(
+        (p) =>
+          new Date(p.paymentDate || p.updatedAt).toDateString() === today
+      )
       .reduce((sum, p) => sum + p.totalPaid, 0);
   }, [paymentsHistory]);
 
@@ -274,7 +298,9 @@ export default function Pagamentos() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Pagamentos</h1>
-          <p className="text-muted-foreground">Registo e gestão de pagamentos</p>
+          <p className="text-muted-foreground">
+            Registo e gestão de pagamentos
+          </p>
         </div>
         <Button onClick={() => setIsModalOpen(true)}>
           <Plus className="w-4 h-4 mr-2" />
@@ -326,6 +352,16 @@ export default function Pagamentos() {
 
       <Card className="card-elevated">
         <CardContent className="p-4">
+          <div className="flex gap-3 mb-4">
+            <div className="relative flex-1">
+              <Input
+                placeholder="Pesquisar por cliente ou número do empréstimo..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+          </div>
+
           <h2 className="text-lg font-semibold mb-4">Pagamentos Recentes</h2>
 
           {paymentsHistory.length > 0 ? (
@@ -344,8 +380,10 @@ export default function Pagamentos() {
                 </thead>
                 <tbody>
                   {paymentsHistory.slice(0, 15).map((payment, i) => {
-                    const paymentClient = getClient(payment.clientId);
-                    const paymentLoan = getLoan(payment.loanId);
+                    const paymentClient = clients.find(
+                      (c) => c.id === payment.clientId
+                    );
+                    const paymentLoan = loans.find((l) => l.id === payment.loanId);
 
                     return (
                       <motion.tr
@@ -354,21 +392,26 @@ export default function Pagamentos() {
                         animate={{ opacity: 1 }}
                         transition={{ delay: i * 0.02 }}
                       >
-                        <td className="font-medium">Parcela {payment.installmentNumber}</td>
+                        <td className="font-medium">
+                          Parcela {payment.installmentNumber}
+                        </td>
                         <td>
-                          {new Date(payment.paymentDate || payment.updatedAt).toLocaleDateString(
-                            'pt-MZ'
-                          )}
+                          {new Date(
+                            payment.paymentDate || payment.updatedAt
+                          ).toLocaleDateString('pt-MZ')}
                         </td>
                         <td>{paymentClient?.fullName}</td>
-                        <td className="text-muted-foreground">{paymentLoan?.loanNumber}</td>
+                        <td className="text-muted-foreground">
+                          {paymentLoan?.loanNumber}
+                        </td>
                         <td className="font-medium text-success">
                           {calcService.formatCurrency(payment.totalPaid)}
                         </td>
                         <td>
                           <span className="status-badge bg-muted text-muted-foreground">
-                            {PAYMENT_METHODS.find((m) => m.value === payment.paymentMethod)?.label ||
-                              payment.paymentMethod}
+                            {PAYMENT_METHODS.find(
+                              (m) => m.value === payment.paymentMethod
+                            )?.label || payment.paymentMethod}
                           </span>
                         </td>
                         <td>
@@ -394,7 +437,20 @@ export default function Pagamentos() {
         </CardContent>
       </Card>
 
-      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+      <Dialog
+        open={isModalOpen}
+        onOpenChange={(open) => {
+          setIsModalOpen(open);
+          if (!open) {
+            setSelectedLoan(null);
+            setSelectedInstallment(null);
+            setAmount('');
+            setReference('');
+            setNotes('');
+            setPaymentMethod('mpesa');
+          }
+        }}
+      >
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Registar Pagamento</DialogTitle>
@@ -415,7 +471,18 @@ export default function Pagamentos() {
                   if (loan) {
                     const nextInstallment = getNextPendingInstallment(loan.id);
                     setSelectedInstallment(nextInstallment || null);
-                    setAmount(nextInstallment ? String(nextInstallment.totalDue - nextInstallment.totalPaid) : '');
+                    setAmount(
+                      nextInstallment
+                        ? String(
+                            Number(
+                              (
+                                nextInstallment.totalDue -
+                                nextInstallment.totalPaid
+                              ).toFixed(2)
+                            )
+                          )
+                        : ''
+                    );
                   } else {
                     setSelectedInstallment(null);
                     setAmount('');
@@ -431,7 +498,9 @@ export default function Pagamentos() {
                     return (
                       <SelectItem key={loan.id} value={loan.id}>
                         {loan.loanNumber} - {loanClient?.fullName}
-                        {loan.daysOverdue > 0 ? ` (${loan.daysOverdue} dias atraso)` : ''}
+                        {loan.daysOverdue > 0
+                          ? ` (${loan.daysOverdue} dias atraso)`
+                          : ''}
                       </SelectItem>
                     );
                   })}
@@ -450,7 +519,8 @@ export default function Pagamentos() {
                   <span className="text-muted-foreground">Saldo Devedor:</span>
                   <span className="font-medium">
                     {calcService.formatCurrency(
-                      selectedLoan.outstandingPrincipal + selectedLoan.outstandingInterest
+                      selectedLoan.outstandingPrincipal +
+                        selectedLoan.outstandingInterest
                     )}
                   </span>
                 </div>
@@ -460,9 +530,12 @@ export default function Pagamentos() {
                   <span className="font-medium">
                     {selectedInstallment
                       ? calcService.formatCurrency(
-                          selectedInstallment.totalDue - selectedInstallment.totalPaid
+                          selectedInstallment.totalDue -
+                            selectedInstallment.totalPaid
                         )
-                      : calcService.formatCurrency(selectedLoan.nextPaymentAmount || 0)}
+                      : calcService.formatCurrency(
+                          selectedLoan.nextPaymentAmount || 0
+                        )}
                   </span>
                 </div>
 
@@ -470,15 +543,30 @@ export default function Pagamentos() {
                   <>
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Capital:</span>
-                      <span>{calcService.formatCurrency(selectedInstallment.principalDue - selectedInstallment.principalPaid)}</span>
+                      <span>
+                        {calcService.formatCurrency(
+                          selectedInstallment.principalDue -
+                            selectedInstallment.principalPaid
+                        )}
+                      </span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Juros:</span>
-                      <span>{calcService.formatCurrency(selectedInstallment.interestDue - selectedInstallment.interestPaid)}</span>
+                      <span>
+                        {calcService.formatCurrency(
+                          selectedInstallment.interestDue -
+                            selectedInstallment.interestPaid
+                        )}
+                      </span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Multa:</span>
-                      <span>{calcService.formatCurrency(selectedInstallment.penaltyDue - selectedInstallment.penaltyPaid)}</span>
+                      <span>
+                        {calcService.formatCurrency(
+                          selectedInstallment.penaltyDue -
+                            selectedInstallment.penaltyPaid
+                        )}
+                      </span>
                     </div>
                   </>
                 )}
@@ -486,7 +574,9 @@ export default function Pagamentos() {
                 {selectedLoan.daysOverdue > 0 && (
                   <div className="flex justify-between text-destructive">
                     <span>Dias em Atraso:</span>
-                    <span className="font-medium">{selectedLoan.daysOverdue} dias</span>
+                    <span className="font-medium">
+                      {selectedLoan.daysOverdue} dias
+                    </span>
                   </div>
                 )}
               </div>
@@ -504,7 +594,8 @@ export default function Pagamentos() {
                 <p className="text-xs text-muted-foreground mt-1">
                   Sugestão:{' '}
                   {calcService.formatCurrency(
-                    selectedInstallment.totalDue - selectedInstallment.totalPaid
+                    selectedInstallment.totalDue -
+                      selectedInstallment.totalPaid
                   )}{' '}
                   (valor restante da próxima parcela)
                 </p>
@@ -549,7 +640,9 @@ export default function Pagamentos() {
             </div>
 
             <div className="p-3 bg-primary/10 border border-primary/30 rounded-lg">
-              <p className="text-sm">✓ Alocação automática: Multa → Juros → Capital</p>
+              <p className="text-sm">
+                ✓ Alocação automática: Multa → Juros → Capital
+              </p>
             </div>
           </div>
 

@@ -1,6 +1,6 @@
-// src/services/payments/paymentService.ts
 import { supabase } from '@/lib/supabase';
 import { mapPaymentFromDb } from '@/lib/mappers/paymentMapper';
+import { mapLoanFromDb } from '@/lib/mappers/loanMapper';
 import { Loan, InstallmentPayment, PaymentMethod } from '@/models/types';
 import { calcService } from '@/services/calcService';
 
@@ -121,9 +121,15 @@ export class PaymentService {
 
     let toAllocate = appliedAmount;
 
-    const penaltyRemaining = Number((payment.penaltyDue - payment.penaltyPaid).toFixed(2));
-    const interestRemaining = Number((payment.interestDue - payment.interestPaid).toFixed(2));
-    const principalRemaining = Number((payment.principalDue - payment.principalPaid).toFixed(2));
+    const penaltyRemaining = Number(
+      (payment.penaltyDue - payment.penaltyPaid).toFixed(2)
+    );
+    const interestRemaining = Number(
+      (payment.interestDue - payment.interestPaid).toFixed(2)
+    );
+    const principalRemaining = Number(
+      (payment.principalDue - payment.principalPaid).toFixed(2)
+    );
 
     const penaltyPaidNow = Math.min(toAllocate, Math.max(0, penaltyRemaining));
     toAllocate -= penaltyPaidNow;
@@ -131,12 +137,21 @@ export class PaymentService {
     const interestPaidNow = Math.min(toAllocate, Math.max(0, interestRemaining));
     toAllocate -= interestPaidNow;
 
-    const principalPaidNow = Math.min(toAllocate, Math.max(0, principalRemaining));
+    const principalPaidNow = Math.min(
+      toAllocate,
+      Math.max(0, principalRemaining)
+    );
     toAllocate -= principalPaidNow;
 
-    const newPrincipalPaid = Number((payment.principalPaid + principalPaidNow).toFixed(2));
-    const newInterestPaid = Number((payment.interestPaid + interestPaidNow).toFixed(2));
-    const newPenaltyPaid = Number((payment.penaltyPaid + penaltyPaidNow).toFixed(2));
+    const newPrincipalPaid = Number(
+      (payment.principalPaid + principalPaidNow).toFixed(2)
+    );
+    const newInterestPaid = Number(
+      (payment.interestPaid + interestPaidNow).toFixed(2)
+    );
+    const newPenaltyPaid = Number(
+      (payment.penaltyPaid + penaltyPaidNow).toFixed(2)
+    );
     const newTotalPaid = Number((payment.totalPaid + appliedAmount).toFixed(2));
 
     let newStatus: InstallmentPayment['status'] = 'partial';
@@ -190,11 +205,23 @@ export class PaymentService {
     }
 
     const outstandingPrincipal = Number(
-      payments.reduce((sum, p) => sum + (p.principalDue - p.principalPaid), 0).toFixed(2)
+      payments
+        .reduce((sum, p) => sum + (p.principalDue - p.principalPaid), 0)
+        .toFixed(2)
     );
 
     const outstandingInterest = Number(
-      payments.reduce((sum, p) => sum + (p.interestDue + p.penaltyDue - p.interestPaid - p.penaltyPaid), 0).toFixed(2)
+      payments
+        .reduce(
+          (sum, p) =>
+            sum +
+            (p.interestDue +
+              p.penaltyDue -
+              p.interestPaid -
+              p.penaltyPaid),
+          0
+        )
+        .toFixed(2)
     );
 
     const totalPaid = Number(
@@ -202,7 +229,10 @@ export class PaymentService {
     );
 
     const nextPending = payments.find(
-      (p) => p.status === 'pending' || p.status === 'partial' || p.status === 'overdue'
+      (p) =>
+        p.status === 'pending' ||
+        p.status === 'partial' ||
+        p.status === 'overdue'
     );
 
     let status = loanRow.status;
@@ -238,6 +268,47 @@ export class PaymentService {
     if (updateError) {
       throw new Error(updateError.message);
     }
+  }
+
+  async repairMissingSchedules(): Promise<{
+    checked: number;
+    repaired: number;
+    skipped: number;
+  }> {
+    const { data: loanRows, error } = await supabase
+      .from('loans')
+      .select('*')
+      .in('status', ['active', 'in_arrears', 'closed'])
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    const loans = (loanRows ?? []).map(mapLoanFromDb);
+
+    let repaired = 0;
+    let skipped = 0;
+
+    for (const loan of loans) {
+      const existingPayments = await this.listByLoanId(loan.id);
+
+      if (existingPayments.length > 0) {
+        await this.refreshLoanBalances(loan.id);
+        skipped++;
+        continue;
+      }
+
+      await this.generateScheduleForLoan(loan);
+      await this.refreshLoanBalances(loan.id);
+      repaired++;
+    }
+
+    return {
+      checked: loans.length,
+      repaired,
+      skipped,
+    };
   }
 }
 

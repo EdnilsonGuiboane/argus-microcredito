@@ -5,14 +5,12 @@ import { Card, CardContent } from '@/components/ui/card';
 import { calcService } from '@/services/calcService';
 import { loanService } from '@/services/loans/loanService';
 import { clientService } from '@/services/clients/clientService';
-import { portfolioService, type PortfolioStats } from '@/services/portfolio/portfolioService';
 import { Loan, Client } from '@/models/types';
 import { cn } from '@/lib/utils';
 
 export default function Carteira() {
   const [loans, setLoans] = useState<Loan[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
-  const [portfolio, setPortfolio] = useState<PortfolioStats | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -20,19 +18,26 @@ export default function Carteira() {
       try {
         setLoading(true);
 
-        const [loansData, clientsData, portfolioStats] = await Promise.all([
+        const [loansData, clientsData] = await Promise.all([
           loanService.list(),
           clientService.list(),
-          portfolioService.getStats(),
         ]);
+        console.log('LOANS RAW CARTEIRA:', loansData);
 
-        const activeLoans = loansData.filter((l) =>
-          ['active', 'in_arrears'].includes(l.status)
-        );
+        const eligibleLoans = loansData.filter((loan) => {
+          const outstandingTotal =
+            (loan.outstandingPrincipal || 0) + (loan.outstandingInterest || 0);
 
-        setLoans(activeLoans);
+          const hasDisbursement = !!loan.disbursedAt;
+          const hasOutstanding = outstandingTotal > 0;
+          const isNotClosed =
+            loan.status !== 'closed' && loan.status !== 'cancelled';
+
+          return hasDisbursement && hasOutstanding && isNotClosed;
+        });
+
+        setLoans(eligibleLoans);
         setClients(clientsData);
-        setPortfolio(portfolioStats);
       } catch (error) {
         console.error('Erro ao carregar carteira:', error);
       } finally {
@@ -40,7 +45,7 @@ export default function Carteira() {
       }
     }
 
-    loadCarteira();
+    void loadCarteira();
   }, []);
 
   const getClient = (id: string) => clients.find((c) => c.id === id);
@@ -52,6 +57,35 @@ export default function Carteira() {
       }
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
+  }, [loans]);
+
+  const portfolio = useMemo(() => {
+    const activePortfolio = loans.reduce(
+      (sum, loan) =>
+        sum + (loan.outstandingPrincipal || 0) + (loan.outstandingInterest || 0),
+      0
+    );
+
+    const totalOutstandingPrincipal = loans.reduce(
+      (sum, loan) => sum + (loan.outstandingPrincipal || 0),
+      0
+    );
+
+    const totalOutstandingInterest = loans.reduce(
+      (sum, loan) => sum + (loan.outstandingInterest || 0),
+      0
+    );
+
+    const inArrearsLoans = loans.filter(
+      (loan) => loan.daysOverdue > 0 || loan.status === 'in_arrears'
+    ).length;
+
+    return {
+      activePortfolio,
+      totalOutstandingPrincipal,
+      totalOutstandingInterest,
+      inArrearsLoans,
+    };
   }, [loans]);
 
   if (loading) {
@@ -72,7 +106,7 @@ export default function Carteira() {
               <div>
                 <p className="text-sm text-muted-foreground">Carteira Activa</p>
                 <p className="text-2xl font-bold">
-                  {calcService.formatCurrency(portfolio?.activePortfolio || 0)}
+                  {calcService.formatCurrency(portfolio.activePortfolio)}
                 </p>
               </div>
               <Briefcase className="w-8 h-8 text-primary/50" />
@@ -86,7 +120,7 @@ export default function Carteira() {
               <div>
                 <p className="text-sm text-muted-foreground">Capital em Dívida</p>
                 <p className="text-2xl font-bold">
-                  {calcService.formatCurrency(portfolio?.totalOutstandingPrincipal || 0)}
+                  {calcService.formatCurrency(portfolio.totalOutstandingPrincipal)}
                 </p>
               </div>
               <Briefcase className="w-8 h-8 text-muted-foreground/50" />
@@ -100,7 +134,7 @@ export default function Carteira() {
               <div>
                 <p className="text-sm text-muted-foreground">Juros em Dívida</p>
                 <p className="text-2xl font-bold">
-                  {calcService.formatCurrency(portfolio?.totalOutstandingInterest || 0)}
+                  {calcService.formatCurrency(portfolio.totalOutstandingInterest)}
                 </p>
               </div>
               <Briefcase className="w-8 h-8 text-muted-foreground/50" />
@@ -114,7 +148,7 @@ export default function Carteira() {
               <div>
                 <p className="text-sm text-muted-foreground">Em Atraso</p>
                 <p className="text-2xl font-bold text-destructive">
-                  {portfolio?.inArrearsLoans || 0}
+                  {portfolio.inArrearsLoans}
                 </p>
               </div>
               <AlertTriangle className="w-8 h-8 text-destructive/50" />
@@ -142,7 +176,11 @@ export default function Carteira() {
                 {sortedLoans.slice(0, 50).map((loan, i) => {
                   const client = getClient(loan.clientId);
                   const totalOutstanding =
-                    loan.outstandingPrincipal + loan.outstandingInterest;
+                    (loan.outstandingPrincipal || 0) +
+                    (loan.outstandingInterest || 0);
+
+                  const isInArrears =
+                    loan.daysOverdue > 0 || loan.status === 'in_arrears';
 
                   return (
                     <motion.tr
@@ -162,7 +200,7 @@ export default function Carteira() {
                       </td>
                       <td
                         className={cn(
-                          loan.daysOverdue > 0 && 'text-destructive font-medium'
+                          isInArrears && 'text-destructive font-medium'
                         )}
                       >
                         {loan.daysOverdue > 0 ? `${loan.daysOverdue} dias` : '-'}
@@ -171,12 +209,12 @@ export default function Carteira() {
                         <span
                           className={cn(
                             'status-badge',
-                            loan.status === 'in_arrears'
+                            isInArrears
                               ? 'bg-destructive/15 text-destructive'
                               : 'bg-success/15 text-success'
                           )}
                         >
-                          {loan.status === 'in_arrears' ? 'Em Atraso' : 'Activo'}
+                          {isInArrears ? 'Em Atraso' : 'Activo'}
                         </span>
                       </td>
                     </motion.tr>

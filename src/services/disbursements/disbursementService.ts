@@ -1,8 +1,35 @@
-// src/services/disbursements/disbursementService.ts
 import { supabase } from '@/lib/supabase';
 import { mapDisbursementFromDb } from '@/lib/mappers/disbursementMapper';
-import { Contract, Disbursement, PaymentMethod } from '@/models/types';
+import { mapLoanFromDb } from '@/lib/mappers/loanMapper';
+import { Contract, Disbursement, Loan, PaymentMethod } from '@/models/types';
 import { loanService } from '@/services/loans/loanService';
+import { paymentService } from '@/services/payments/paymentService';
+
+function formatDateOnly(date: Date): string {
+  return date.toISOString().split('T')[0];
+}
+
+function calculateNextPaymentDate(disbursedAtIso: string): string {
+  const disbursedAt = new Date(disbursedAtIso);
+
+  const year = disbursedAt.getUTCFullYear();
+  const month = disbursedAt.getUTCMonth();
+  const day = disbursedAt.getUTCDate();
+
+  const targetMonth = month + 1;
+  const targetYear = year + Math.floor(targetMonth / 12);
+  const normalizedMonth = targetMonth % 12;
+
+  const lastDayOfTargetMonth = new Date(
+    Date.UTC(targetYear, normalizedMonth + 1, 0)
+  ).getUTCDate();
+
+  const safeDay = Math.min(day, lastDayOfTargetMonth);
+
+  const nextDate = new Date(Date.UTC(targetYear, normalizedMonth, safeDay));
+
+  return formatDateOnly(nextDate);
+}
 
 export class DisbursementService {
   async list(): Promise<Disbursement[]> {
@@ -23,13 +50,14 @@ export class DisbursementService {
     method: PaymentMethod,
     reference?: string,
     notes?: string
-  ): Promise<{ loan: unknown; disbursement: Disbursement }> {
+  ): Promise<{ loan: Loan; disbursement: Disbursement }> {
     const existingLoan = await loanService.getByContractId(contract.id);
     if (existingLoan) {
       throw new Error('Este contrato já foi desembolsado.');
     }
 
     const now = new Date().toISOString();
+    const nextPaymentDate = calculateNextPaymentDate(now);
     const loanNumber = `EMP-${new Date().getFullYear()}-${Date.now()}`;
 
     const loanPayload = {
@@ -50,7 +78,10 @@ export class DisbursementService {
       outstanding_interest: contract.totalInterest,
       total_paid: 0,
       days_overdue: 0,
+      next_payment_date: nextPaymentDate,
       next_payment_amount: contract.monthlyPayment,
+      last_payment_date: null,
+      paid_off_at: null,
       status: 'active',
       analyst_id: null,
       cashier_id: null,
@@ -93,10 +124,13 @@ export class DisbursementService {
       throw new Error(disbursementError.message);
     }
 
-    
+    const createdLoan = mapLoanFromDb(loanData);
+
+    await paymentService.generateScheduleForLoan(createdLoan);
+    await paymentService.refreshLoanBalances(createdLoan.id);
 
     return {
-      loan: loanData,
+      loan: createdLoan,
       disbursement: mapDisbursementFromDb(disbursementData),
     };
   }
