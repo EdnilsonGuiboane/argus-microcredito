@@ -16,26 +16,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 
-const demoAccounts = [
-  {
-    role: 'Admin',
-    email: 'admin@microcredito.co.mz',
-    password: 'admin123000',
-    color: 'bg-primary',
-  },
-  {
-    role: 'Analista',
-    email: 'ana.sitoe@microcredito.co.mz',
-    password: 'analyst12300',
-    color: 'bg-accent',
-  },
-  {
-    role: 'Caixa',
-    email: 'caixa@microcredito.co.mz',
-    password: 'caixa12300',
-    color: 'bg-success',
-  },
-];
+
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -242,45 +223,7 @@ export default function Login() {
             </Button>
           </form>
 
-          <div className="mt-8 pt-8 border-t border-border">
-            <p className="text-sm text-muted-foreground text-center mb-4">
-              Contas de demonstração
-            </p>
-
-            <div className="space-y-2">
-              {demoAccounts.map((account) => (
-                <Card
-                  key={account.email}
-                  className="cursor-pointer hover:shadow-md transition-shadow card-elevated"
-                  onClick={() => handleDemoLogin(account.email, account.password)}
-                >
-                  <CardContent className="p-3 flex items-center gap-3">
-                    <div
-                      className={cn(
-                        'w-8 h-8 rounded-lg flex items-center justify-center text-primary-foreground',
-                        account.color
-                      )}
-                    >
-                      <Shield className="w-4 h-4" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-medium">{account.role}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {account.email}
-                      </p>
-                    </div>
-                    <span className="text-xs text-muted-foreground">
-                      Clicar para entrar
-                    </span>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-
-            <p className="text-xs text-muted-foreground text-center mt-3">
-              Estas contas só funcionam se existirem no Supabase Auth e na base de dados desta instituição.
-            </p>
-          </div>
+          
         </div>
       </motion.div>
     </div>
