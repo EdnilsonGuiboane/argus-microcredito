@@ -84,8 +84,7 @@ export default function Pagamentos() {
         paymentService.list(),
         clientService.list(),
       ]);
-      console.log('LOANS RAW PAGAMENTOS:', loansData);
-      console.log('PAYMENTS RAW PAGAMENTOS:', paymentsData);
+      
 
       const eligibleLoans = loansData.filter((loan) => {
         const outstandingTotal =

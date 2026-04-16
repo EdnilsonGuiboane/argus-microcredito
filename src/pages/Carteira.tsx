@@ -22,7 +22,7 @@ export default function Carteira() {
           loanService.list(),
           clientService.list(),
         ]);
-        console.log('LOANS RAW CARTEIRA:', loansData);
+        
 
         const eligibleLoans = loansData.filter((loan) => {
           const outstandingTotal =
