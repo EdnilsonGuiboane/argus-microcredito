@@ -901,13 +901,11 @@ export default function Relatorios() {
         animate={{ opacity: 1, y: 0 }}
         className="relative"
       >
-        <div className="flex items-start justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <Building2 className="w-6 h-6 text-primary" />
-              <h1 className="text-2xl font-bold tracking-tight">
-                Relatórios Institucionais
-              </h1>
+              <Building2 className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
+              <h1 className="text-lg sm:text-2xl font-bold tracking-tight">Relatórios Institucionais</h1>
             </div>
             <p className="text-muted-foreground text-sm">
               MicroLoan Hub • Relatório gerado em {reportDate} • Período:{' '}
@@ -935,13 +933,14 @@ export default function Relatorios() {
 
       <Card className="card-elevated">
         <CardContent className="p-4">
-          <div className="flex flex-wrap gap-4 items-end">
-            <div>
+          <div className="flex flex-wrap gap-3 items-end">
+            <div className="w-full sm:w-auto">
               <Label className="text-xs font-medium">Período Rápido</Label>
               <Select value={selectedPeriod} onValueChange={handlePeriodChange}>
-                <SelectTrigger className="w-36">
+                <SelectTrigger className="w-full sm:w-36">
                   <SelectValue />
                 </SelectTrigger>
+
                 <SelectContent>
                   <SelectItem value="mes">Este Mês</SelectItem>
                   <SelectItem value="trimestre">Trimestre</SelectItem>
@@ -951,27 +950,27 @@ export default function Relatorios() {
               </Select>
             </div>
 
-            <div>
+            <div className="flex-1 min-w-[120px] sm:flex-none">
               <Label className="text-xs font-medium">De</Label>
               <Input
                 type="date"
                 value={dateFrom}
                 onChange={(e) => setDateFrom(e.target.value)}
-                className="w-40"
+                className="w-full sm:w-40"
               />
             </div>
 
-            <div>
+            <div className="flex-1 min-w-[120px] sm:flex-none">
               <Label className="text-xs font-medium">Até</Label>
               <Input
                 type="date"
                 value={dateTo}
                 onChange={(e) => setDateTo(e.target.value)}
-                className="w-40"
+                className="w-full sm:w-40"
               />
             </div>
 
-            <div className="ml-auto">
+             <div className="w-full sm:w-auto sm:ml-auto">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button className="gap-2">
@@ -1042,13 +1041,9 @@ export default function Relatorios() {
       </Card>
 
       <Tabs defaultValue="executive" className="space-y-4">
-        <TabsList className="bg-muted/50 p-1">
-          <TabsTrigger value="executive" className="text-xs">
-            Sumário Executivo
-          </TabsTrigger>
-          <TabsTrigger value="portfolio" className="text-xs">
-            Qualidade da Carteira
-          </TabsTrigger>
+        <TabsList className="bg-muted/50 p-1 flex flex-wrap h-auto gap-1">
+          <TabsTrigger value="executive" className="text-xs">Sumário</TabsTrigger>
+          <TabsTrigger value="portfolio" className="text-xs">Carteira</TabsTrigger>
           {isCashier && (
             <TabsTrigger value="operations" className="text-xs">
               Operações
@@ -1349,7 +1344,7 @@ export default function Relatorios() {
             icon={Shield}
           />
 
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
             <MetricCard
               label="Carteira Total"
               value={calcService.formatCurrency(portfolioStats.totalActiveAmount)}
@@ -1433,7 +1428,7 @@ export default function Relatorios() {
                 Mapa de Aging Detalhado
               </CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -1526,7 +1521,7 @@ export default function Relatorios() {
                 Qualidade por Produto de Crédito
               </CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>

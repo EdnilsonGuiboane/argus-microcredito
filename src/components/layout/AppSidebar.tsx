@@ -17,12 +17,23 @@ import {
   ChevronRight,
   LogOut,
   Shield,
+  Menu,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import {
+  Sheet,
+  SheetContent,
+  SheetTrigger,
+} from '@/components/ui/sheet';
 import { UserRole } from '@/models/types';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 interface NavItem {
   path: string;
@@ -32,58 +43,99 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'analyst', 'cashier'] },
-  { path: '/clientes', label: 'Clientes', icon: Users, roles: ['admin', 'analyst'] },
-  { path: '/solicitacoes', label: 'Solicitações', icon: FileText, roles: ['admin', 'analyst'] },
-  { path: '/analise', label: 'Análise', icon: ClipboardCheck, roles: ['admin', 'analyst'] },
-  { path: '/contratos', label: 'Contratos', icon: FileSignature, roles: ['admin', 'analyst', 'cashier'] },
-  { path: '/desembolsos', label: 'Desembolsos', icon: Banknote, roles: ['admin', 'cashier'] },
-  { path: '/pagamentos', label: 'Pagamentos', icon: CreditCard, roles: ['admin', 'cashier'] },
-  { path: '/carteira', label: 'Carteira', icon: Briefcase, roles: ['admin', 'analyst', 'cashier'] },
-  { path: '/cobrancas', label: 'Cobranças', icon: PhoneCall, roles: ['admin', 'analyst'] },
-  { path: '/relatorios', label: 'Relatórios', icon: BarChart3, roles: ['admin', 'analyst'] },
-  { path: '/configuracoes', label: 'Configurações', icon: Settings, roles: ['admin'] },
+  {
+    path: '/dashboard',
+    label: 'Dashboard',
+    icon: LayoutDashboard,
+    roles: ['admin', 'analyst', 'cashier'],
+  },
+  {
+    path: '/clientes',
+    label: 'Clientes',
+    icon: Users,
+    roles: ['admin', 'analyst'],
+  },
+  {
+    path: '/solicitacoes',
+    label: 'Solicitações',
+    icon: FileText,
+    roles: ['admin', 'analyst'],
+  },
+  {
+    path: '/analise',
+    label: 'Análise',
+    icon: ClipboardCheck,
+    roles: ['admin', 'analyst'],
+  },
+  {
+    path: '/contratos',
+    label: 'Contratos',
+    icon: FileSignature,
+    roles: ['admin', 'analyst', 'cashier'],
+  },
+  {
+    path: '/desembolsos',
+    label: 'Desembolsos',
+    icon: Banknote,
+    roles: ['admin', 'cashier'],
+  },
+  {
+    path: '/pagamentos',
+    label: 'Pagamentos',
+    icon: CreditCard,
+    roles: ['admin', 'cashier'],
+  },
+  {
+    path: '/carteira',
+    label: 'Carteira',
+    icon: Briefcase,
+    roles: ['admin', 'analyst', 'cashier'],
+  },
+  {
+    path: '/cobrancas',
+    label: 'Cobranças',
+    icon: PhoneCall,
+    roles: ['admin', 'analyst'],
+  },
+  {
+    path: '/relatorios',
+    label: 'Relatórios',
+    icon: BarChart3,
+    roles: ['admin', 'analyst'],
+  },
+  {
+    path: '/configuracoes',
+    label: 'Configurações',
+    icon: Settings,
+    roles: ['admin'],
+  },
 ];
 
-export function AppSidebar() {
-  const [collapsed, setCollapsed] = useState(false);
-  const { user, roles, logout, canAccess } = useAuth();
-  const location = useLocation();
+interface SidebarContentProps {
+  collapsed: boolean;
+  user: ReturnType<typeof useAuth>['user'];
+  primaryRole: UserRole | null;
+  visibleItems: NavItem[];
+  locationPathname: string;
+  getRoleBadge: (role: UserRole) => { label: string; color: string };
+  initials: string;
+  onLogout: () => void;
+}
 
-  const visibleItems = navItems.filter((item) => canAccess(item.roles));
-
-  const primaryRole: UserRole | null = roles[0] ?? null;
-
-  const getRoleBadge = (role: UserRole) => {
-    const badges: Record<UserRole, { label: string; color: string }> = {
-      admin: { label: 'Admin', color: 'bg-primary/20 text-primary' },
-      analyst: { label: 'Analista', color: 'bg-accent/20 text-accent' },
-      cashier: { label: 'Caixa', color: 'bg-success/20 text-success' },
-    };
-    return badges[role];
-  };
-
-  const initials =
-    user?.fullName
-      ?.split(' ')
-      .map((n) => n[0])
-      .join('')
-      .slice(0, 2)
-      .toUpperCase() || 'U';
-
+function SidebarContent({
+  collapsed,
+  user,
+  primaryRole,
+  visibleItems,
+  locationPathname,
+  getRoleBadge,
+  initials,
+  onLogout,
+}: SidebarContentProps) {
   return (
-    <motion.aside
-      initial={false}
-      animate={{ width: collapsed ? 72 : 256 }}
-      transition={{ duration: 0.2, ease: 'easeInOut' }}
-      className="fixed left-0 top-0 z-40 h-screen bg-sidebar border-r border-sidebar-border flex flex-col"
-    >
+    <>
       <div className="h-16 flex items-center px-4 border-b border-sidebar-border">
-        <motion.div
-          initial={false}
-          animate={{ opacity: 1 }}
-          className="flex items-center gap-3"
-        >
+        <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-lg bg-sidebar-primary flex items-center justify-center flex-shrink-0">
             <Shield className="w-5 h-5 text-sidebar-primary-foreground" />
           </div>
@@ -100,13 +152,13 @@ export function AppSidebar() {
               </motion.span>
             )}
           </AnimatePresence>
-        </motion.div>
+        </div>
       </div>
 
       <nav className="flex-1 py-4 overflow-y-auto scrollbar-hide">
         <ul className="space-y-1 px-3">
           {visibleItems.map((item) => {
-            const isActive = location.pathname === item.path;
+            const isActive = locationPathname === item.path;
             const Icon = item.icon;
 
             const linkContent = (
@@ -211,7 +263,7 @@ export function AppSidebar() {
                   <Button
                     variant="ghost"
                     size="icon"
-                    onClick={() => void logout()}
+                    onClick={onLogout}
                     className="text-sidebar-muted hover:text-sidebar-foreground hover:bg-sidebar-accent"
                   >
                     <LogOut className="w-4 h-4" />
@@ -223,6 +275,95 @@ export function AppSidebar() {
           </div>
         )}
       </div>
+    </>
+  );
+}
+
+export function AppSidebar() {
+  const [collapsed, setCollapsed] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  const { user, roles, logout, canAccess } = useAuth();
+  const location = useLocation();
+  const isMobile = useIsMobile();
+
+  const visibleItems = navItems.filter((item) => canAccess(item.roles));
+  const primaryRole: UserRole | null = roles[0] ?? null;
+
+  const getRoleBadge = (role: UserRole) => {
+    const badges: Record<UserRole, { label: string; color: string }> = {
+      admin: { label: 'Admin', color: 'bg-primary/20 text-primary' },
+      analyst: { label: 'Analista', color: 'bg-accent/20 text-accent' },
+      cashier: { label: 'Caixa', color: 'bg-success/20 text-success' },
+    };
+    return badges[role];
+  };
+
+  const initials =
+    user?.fullName
+      ?.split(' ')
+      .map((n) => n[0])
+      .join('')
+      .slice(0, 2)
+      .toUpperCase() || 'U';
+
+  const handleLogout = () => {
+    void logout();
+  };
+
+  const sharedProps: SidebarContentProps = {
+    collapsed: false,
+    user,
+    primaryRole,
+    visibleItems,
+    locationPathname: location.pathname,
+    getRoleBadge,
+    initials,
+    onLogout: handleLogout,
+  };
+
+  if (isMobile) {
+    return (
+      <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+        <SheetTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="fixed left-3 top-3 z-50 md:hidden bg-card shadow-md border border-border"
+          >
+            <Menu className="w-5 h-5" />
+          </Button>
+        </SheetTrigger>
+
+        <SheetContent
+          side="left"
+          className="w-[280px] p-0 bg-sidebar border-sidebar-border"
+        >
+          <div
+            className="flex flex-col h-full"
+            onClick={() => setMobileOpen(false)}
+          >
+            <SidebarContent
+              {...sharedProps}
+              collapsed={false}
+            />
+          </div>
+        </SheetContent>
+      </Sheet>
+    );
+  }
+
+  return (
+    <motion.aside
+      initial={false}
+      animate={{ width: collapsed ? 72 : 256 }}
+      transition={{ duration: 0.2, ease: 'easeInOut' }}
+      className="fixed left-0 top-0 z-40 h-screen bg-sidebar border-r border-sidebar-border flex flex-col"
+    >
+      <SidebarContent
+        {...sharedProps}
+        collapsed={collapsed}
+      />
 
       <button
         onClick={() => setCollapsed(!collapsed)}

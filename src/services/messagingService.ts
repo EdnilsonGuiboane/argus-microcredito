@@ -105,7 +105,7 @@ export function isValidMozambiquePhone(phone: string): boolean {
   return /^\+258(8[4-7])\d{7}$/.test(normalizePhone(phone));
 }
 
-// ── Service ────────────────────────────────────────────────────────
+// ── Service ────────────────────────────────────────────
 
 class MessagingService {
   // -- Settings --

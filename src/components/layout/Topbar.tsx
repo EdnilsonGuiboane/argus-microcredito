@@ -26,7 +26,8 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { clientService } from '@/services/clients/clientService';
 import { applicationService } from '@/services/applications/applicationService';
 import { loanService } from '@/services/loans/loanService';
-import { Client, LoanApplication, Loan } from '@/models/types';
+import { LoanApplication, Loan } from '@/models/types';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 interface SearchResult {
   type: 'client' | 'application' | 'loan';
@@ -48,6 +49,7 @@ export function Topbar() {
   const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -128,7 +130,7 @@ export function Topbar() {
 
       applications
         .filter(
-          (a) =>
+          (a: LoanApplication) =>
             a.id.toLowerCase().includes(query) ||
             a.clientId.toLowerCase().includes(query)
         )
@@ -149,7 +151,7 @@ export function Topbar() {
 
       loans
         .filter(
-          (l) =>
+          (l: Loan) =>
             l.loanNumber.toLowerCase().includes(query) ||
             l.id.toLowerCase().includes(query)
         )
@@ -193,7 +195,13 @@ export function Topbar() {
   };
 
   return (
-    <header className="h-16 bg-card border-b border-border flex items-center justify-between px-6">
+    <header
+      className={
+        isMobile
+          ? 'h-16 bg-card border-b border-border flex items-center justify-between px-3 pl-14'
+          : 'h-16 bg-card border-b border-border flex items-center justify-between px-6'
+      }
+    >
       <div className="relative flex-1 max-w-xl">
         <AnimatePresence>
           {searchOpen ? (
@@ -204,13 +212,19 @@ export function Topbar() {
               className="relative"
             >
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+
               <Input
                 ref={searchInputRef}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Pesquisar clientes, solicitações, empréstimos..."
+                placeholder={
+                  isMobile
+                    ? 'Pesquisar...'
+                    : 'Pesquisar clientes, solicitações, empréstimos...'
+                }
                 className="pl-10 pr-10 bg-muted/50 border-none focus-visible:ring-1"
               />
+
               <button
                 onClick={() => {
                   setSearchOpen(false);
@@ -235,18 +249,22 @@ export function Topbar() {
                   ) : searchResults.length > 0 ? (
                     searchResults.map((result) => {
                       const Icon = getResultIcon(result.type);
+
                       return (
                         <button
                           key={`${result.type}-${result.id}`}
                           onClick={() => handleResultClick(result)}
                           className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors text-left"
                         >
-                          <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                          <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
                             <Icon className="w-4 h-4 text-primary" />
                           </div>
-                          <div>
-                            <p className="text-sm font-medium">{result.title}</p>
-                            <p className="text-xs text-muted-foreground">
+
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium truncate">
+                              {result.title}
+                            </p>
+                            <p className="text-xs text-muted-foreground truncate">
                               {result.subtitle}
                             </p>
                           </div>
@@ -270,17 +288,20 @@ export function Topbar() {
                 className="text-muted-foreground hover:text-foreground"
               >
                 <Search className="w-4 h-4 mr-2" />
-                <span className="text-sm">Pesquisar...</span>
-                <kbd className="ml-4 pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
-                  <span className="text-xs">⌘</span>K
-                </kbd>
+                <span className="text-sm hidden sm:inline">Pesquisar...</span>
+
+                {!isMobile && (
+                  <kbd className="ml-4 pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
+                    <span className="text-xs">⌘</span>K
+                  </kbd>
+                )}
               </Button>
             </motion.div>
           )}
         </AnimatePresence>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1 sm:gap-2">
         <Button
           variant="ghost"
           size="icon"
@@ -307,11 +328,12 @@ export function Topbar() {
           <DropdownMenuTrigger asChild>
             <Button
               variant="ghost"
-              className="flex items-center gap-2 text-muted-foreground hover:text-foreground"
+              className="flex items-center gap-2 text-muted-foreground hover:text-foreground px-2"
             >
               <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
                 <User className="w-4 h-4 text-primary" />
               </div>
+
               <span className="text-sm font-medium hidden sm:inline">
                 {user?.fullName?.split(' ')[0] || 'User'}
               </span>

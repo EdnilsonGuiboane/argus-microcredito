@@ -72,7 +72,7 @@ export default function SendMessageModal({
           messagingService.interpolate(defaultTpl.body, {
             client,
             loan,
-            agentName: user?.fullName || user?.name,
+            agentName: user?.fullName || user?.fullName,
           })
         );
       } else {
@@ -91,7 +91,7 @@ export default function SendMessageModal({
         messagingService.interpolate(tpl.body, {
           client,
           loan,
-          agentName: user?.fullName || user?.name,
+          agentName: user?.fullName || user?.fullName,
         })
       );
     }
@@ -137,7 +137,7 @@ export default function SendMessageModal({
         messageText,
         type,
         user.id,
-        user.fullName || user.name || 'Utilizador'
+        user.fullName || user.fullName || 'Utilizador'
       );
 
       if (result.success) {
@@ -228,19 +228,19 @@ export default function SendMessageModal({
         <div className="space-y-4 py-2">
           {optOut && (
             <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-sm text-destructive">
-              ⚠ Este cliente optou por não receber mensagens (opt-out).
+               Este cliente optou por não receber mensagens (opt-out).
             </div>
           )}
 
           {!canSend && (
             <div className="p-3 bg-warning/10 border border-warning/20 rounded-lg text-sm text-warning">
-              ⚠ Já foi enviada uma mensagem deste tipo hoje para este empréstimo.
+              Já foi enviada uma mensagem deste tipo hoje para este empréstimo.
             </div>
           )}
 
           {!phoneValid && (
             <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-sm text-destructive">
-              ⚠ Número de telefone inválido: {client.phone}
+              Número de telefone inválido: {client.phone}
             </div>
           )}
 

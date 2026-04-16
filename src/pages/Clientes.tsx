@@ -224,13 +224,13 @@ export default function Clientes() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Clientes</h1>
-          <p className="text-muted-foreground">{clients.length} clientes registados</p>
+          <h1 className="text-xl sm:text-2xl font-bold">Clientes</h1>
+          <p className="text-sm text-muted-foreground">{clients.length} clientes registados</p>
         </div>
 
-        <Button
+        <Button size="sm"
           onClick={() => {
             setSelectedClient(null);
             setIsFormOpen(true);
@@ -243,18 +243,18 @@ export default function Clientes() {
 
       <Card className="card-elevated">
         <CardContent className="p-4">
-          <div className="flex gap-3 mb-4">
+          <div className="flex flex-col sm:flex-row gap-3 mb-4">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
-                placeholder="Pesquisar por nome, BI, NUIT ou telefone..."
+                placeholder="Pesquisar por nome, BI, telefone..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-10"
               />
             </div>
 
-            <Button variant="outline">
+            <Button variant="outline" size="sm" className="w-full sm:w-auto">
               <Filter className="w-4 h-4 mr-2" />
               Filtros
             </Button>

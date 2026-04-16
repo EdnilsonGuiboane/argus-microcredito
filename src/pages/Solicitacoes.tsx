@@ -148,47 +148,41 @@ export default function Solicitacoes() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="space-y-4 sm:space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Solicitações</h1>
-          <p className="text-muted-foreground">Pipeline de pedidos de crédito</p>
+          <h1 className="text-xl sm:text-2xl font-bold">Solicitações</h1>
+          <p className="text-sm text-muted-foreground">Pipeline de pedidos de crédito</p>
         </div>
 
-        <Button onClick={() => setIsWizardOpen(true)}>
+        <Button onClick={() => setIsWizardOpen(true)} className="w-full sm:w-auto">
           <Plus className="w-4 h-4 mr-2" />
           Nova Solicitação
         </Button>
       </div>
 
-      <div className="grid grid-cols-5 gap-4">
+      <div className="flex gap-2 sm:gap-4 overflow-x-auto pb-2 sm:pb-0 -mx-3 px-3 sm:mx-0 sm:px-0 sm:grid sm:grid-cols-5">
         {columns.map((status) => (
-          <Card key={status} className="card-elevated">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <span className={cn('status-badge', statusConfig[status].color)}>
-                  {statusConfig[status].label}
-                </span>
-                <span className="text-2xl font-bold">{grouped[status].length}</span>
+          <Card key={status} className="card-elevated flex-shrink-0 min-w-[120px] sm:min-w-0">
+            <CardContent className="p-3 sm:p-4">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1">
+                <span className={cn('status-badge text-[10px] sm:text-xs', statusConfig[status].color)}>{statusConfig[status].label}</span>
+                <span className="text-xl sm:text-2xl font-bold">{grouped[status].length}</span>
               </div>
             </CardContent>
           </Card>
         ))}
       </div>
 
-      <div className="flex gap-4 overflow-x-auto pb-4">
+      <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-4 -mx-3 px-3 sm:mx-0 sm:px-0">
         {columns.map((status) => (
-          <div key={status} className="flex-shrink-0 w-72">
+          <div key={status} className="flex-shrink-0 w-[260px] sm:w-72">
             <div className="flex items-center gap-2 mb-3">
-              <span className={cn('status-badge', statusConfig[status].color)}>
-                {statusConfig[status].label}
-              </span>
-              <span className="text-sm text-muted-foreground">
-                {grouped[status].length}
-              </span>
+             <span className={cn('status-badge text-[10px] sm:text-xs', statusConfig[status].color)}>{statusConfig[status].label}</span>
+              <span className="text-xs sm:text-sm text-muted-foreground">{grouped[status].length}</span>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-2 sm:space-y-3">
               {grouped[status].slice(0, 8).map((app, i) => {
                 const client = getClient(app.clientId);
                 const product = getProduct(app.productId);
@@ -204,23 +198,23 @@ export default function Solicitacoes() {
                       className="card-elevated cursor-pointer hover:shadow-card-hover transition-shadow"
                       onClick={() => handleCardClick(app)}
                     >
-                      <CardContent className="p-4">
-                        <div className="flex items-start gap-3">
-                          <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-                            <FileText className="w-4 h-4 text-primary" />
+                       <CardContent className="p-3 sm:p-4">
+                        <div className="flex items-start gap-2 sm:gap-3">
+                          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                            <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />
                           </div>
 
                           <div className="flex-1 min-w-0">
-                            <p className="font-medium truncate">
+                            <p className="text-sm sm:text-base font-medium truncate">
                               {client?.fullName || 'Cliente'}
                             </p>
 
-                            <p className="text-sm text-muted-foreground">
+                            <p className="text-xs sm:text-sm text-muted-foreground">
                               {calcService.formatCurrency(app.requestedAmount)}
                             </p>
 
-                            <div className="flex items-center gap-2 mt-2">
-                              <p className="text-xs text-muted-foreground">
+                            <div className="flex items-center gap-2 mt-1.5 sm:mt-2">
+                              <p className="text-[10px] sm:text-xs text-muted-foreground">
                                 {app.termMonths} meses
                               </p>
                               {app.riskLevel && getRiskBadge(app.riskLevel)}
@@ -255,13 +249,12 @@ export default function Solicitacoes() {
               })}
 
               {grouped[status].length === 0 && (
-                <div className="text-center py-8 text-muted-foreground text-sm">
-                  Nenhuma solicitação
-                </div>
+                <div className="text-center py-6 sm:py-8 text-muted-foreground text-xs sm:text-sm">Nenhuma solicitação</div>
+                 
               )}
 
               {grouped[status].length > 8 && (
-                <Button variant="ghost" className="w-full text-sm">
+                <Button variant="ghost" className="w-full text-xs sm:text-sm">
                   Ver mais {grouped[status].length - 8}
                 </Button>
               )}
@@ -279,7 +272,7 @@ export default function Solicitacoes() {
       />
 
       <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl mx-3 sm:mx-auto max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Solicitação #{selectedApp?.id.slice(-6)}</DialogTitle>
             <DialogDescription>
