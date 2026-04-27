@@ -18,6 +18,7 @@ import {
   LogOut,
   Shield,
   Menu,
+  Calculator,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
@@ -55,6 +56,7 @@ const navItems: NavItem[] = [
     icon: Users,
     roles: ['admin', 'analyst'],
   },
+  { path: '/simulador', label: 'Simulador', icon: Calculator, roles: ['admin', 'analyst'] },
   {
     path: '/solicitacoes',
     label: 'Solicitações',

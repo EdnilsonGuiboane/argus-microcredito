@@ -22,6 +22,7 @@ import Cobrancas from "@/pages/Cobrancas";
 import Relatorios from "@/pages/Relatorios";
 import Configuracoes from "@/pages/Configuracoes";
 import NotFound from "./pages/NotFound";
+import Simulador from "./pages/Simulador";
  
  const queryClient = new QueryClient();
  
@@ -44,6 +45,7 @@ import NotFound from "./pages/NotFound";
                  <Route element={<MainLayout />}>
                    <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
                   <Route path="/clientes" element={<ProtectedRoute requiredRoles={['admin', 'analyst']}><Clientes /></ProtectedRoute>} />
+                  <Route path="/simulador" element={<ProtectedRoute requiredRoles={['admin', 'analyst']}><Simulador /></ProtectedRoute>} />
                     <Route path="/solicitacoes" element={<ProtectedRoute requiredRoles={['admin', 'analyst']}><Solicitacoes /></ProtectedRoute>} />
                     <Route path="/analise" element={<ProtectedRoute requiredRoles={['admin', 'analyst']}><Analise /></ProtectedRoute>} />
                     <Route path="/contratos" element={<ProtectedRoute><Contratos /></ProtectedRoute>} />
