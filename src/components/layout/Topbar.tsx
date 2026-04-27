@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search,
-  Bell,
   Sun,
   Moon,
   User,
@@ -28,6 +27,7 @@ import { applicationService } from '@/services/applications/applicationService';
 import { loanService } from '@/services/loans/loanService';
 import { LoanApplication, Loan } from '@/models/types';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { NotificationBell } from './NotificationBell';
 
 interface SearchResult {
   type: 'client' | 'application' | 'loan';
@@ -315,14 +315,7 @@ export function Topbar() {
           )}
         </Button>
 
-        <Button
-          variant="ghost"
-          size="icon"
-          className="text-muted-foreground hover:text-foreground relative"
-        >
-          <Bell className="w-5 h-5" />
-          <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-destructive" />
-        </Button>
+        <NotificationBell />
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
